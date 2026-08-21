@@ -1,0 +1,68 @@
+user {
+    id pk
+    email text unique not null
+    first_name text
+    last_name text
+    created_at timestampz not null default now()
+}
+
+project {
+    id pk
+    name text not null
+    user_id fk not null
+}
+
+repo {
+    id pk
+    name text
+    project_id fk
+
+    unique (id, project_id)
+}
+
+note {
+    id pk
+    filepath text not null
+    project_id fk not null
+    repo_id fk
+    
+    content text not null
+    version int not null default 1
+
+    created_at timestampz not null default now()
+    updated_at timestampz not null default now()
+    deleted_at timestampz
+    created_by fk not null
+    updated_by fk not null
+
+    unique (project_id, filepath) where deleted_at is null
+    fk (repo_id, project_id) references repo(id, project_id)
+}
+
+note_revision {
+    id pk
+    note_id fk not null
+    version int not null
+    snapshot text not null
+    author fk not null
+    created_at timestampz not null default now()
+
+    unique (note_id, version)
+}
+
+
+tag {
+    id pk
+    name text not null
+    color text
+    project_id fk
+
+    unique (project_id, name)
+}
+
+note_tag {
+    note_id fk not null
+    tag_id fk not null
+
+    composite key (note_id, tag_id)
+}

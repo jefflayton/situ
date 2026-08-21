@@ -1,0 +1,7 @@
+.{
+    .name = .situ,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.16.0",
+    .paths = .{""},
+    .fingerprint = 0x74f41980746355de,
+}

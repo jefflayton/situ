@@ -1,0 +1,12 @@
+note_reference {
+    id pk
+    note_id fk not null
+    project_id fk not null
+    repo_id fk
+    commit text check (commit is null or repo_id is not null)
+    file text check (file is null or repo_id is not null)
+    line_range int4range check (line_range is null or file is not null)
+
+    fk (repo_id, project_id) references repo(id, project_id)
+    unique (note_id, commit, file, line_range)
+}
