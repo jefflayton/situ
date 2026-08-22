@@ -1,1 +1,1 @@
-pub const Note = @import("model/note.zig");
+pub const model = @import("model.zig");
