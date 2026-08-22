@@ -1,20 +1,25 @@
 const std = @import("std");
 
+const Artifact = struct {
+    exe: *std.Build.Step.Compile,
+    install: *std.Build.Step,
+};
+
 pub fn build(b: *std.Build) void {
-    const cli_step = buildCli(b);
-
-    const all = b.step("all", "Build all targets");
-    all.dependOn(cli_step);
-
-    const check = b.step("check", "Compile-check all");
-    check.dependOn(cli_step);
-}
-
-fn buildCli(b: *std.Build) *std.Build.Step {
-    const step = b.step("cli", "Build the cli");
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const check = b.step("check", "Compile-check all");
+
+    const cli = buildCli(b, target, optimize);
+
+    check.dependOn(&cli.exe.step);
+
+    b.getInstallStep().dependOn(cli.install);
+}
+
+fn buildCli(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) Artifact {
+    const step = b.step("cli", "Build the cli");
 
     const core = b.createModule(.{
         .target = target,
@@ -43,5 +48,5 @@ fn buildCli(b: *std.Build) *std.Build.Step {
     if (b.args) |args| run_cmd.addArgs(args);
     run.dependOn(&run_cmd.step);
 
-    return step;
+    return .{ .exe = exe, .install = step };
 }
