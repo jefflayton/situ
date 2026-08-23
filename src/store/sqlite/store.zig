@@ -21,6 +21,68 @@ pub const Sqlite = struct {
         try self.db.exec("BEGIN", .{}, .{});
         return .{ .store = self, .done = false };
     }
+
+    pub const Txn = struct {
+        store: *Sqlite,
+        done: bool,
+
+        pub fn commit(self: *Txn) !void {
+            try self.store.db.exec("COMMIT", .{}, .{});
+            self.done = true;
+        }
+
+        pub fn deinit(self: *Txn) void {
+            if (!self.done) self.store.db.exec("ROLLBACK", .{}, .{}) catch {};
+        }
+
+        pub fn getMeta(self: *Txn) !?core.model.Meta {
+            var stmt = try self.store.db.prepare(
+                \\SELECT id, replica_id, last_hlc
+                \\FROM meta
+                \\WHERE id = 1
+            );
+            defer stmt.deinit();
+
+            const row = try stmt.one(core.model.Meta, .{}, .{});
+            return row;
+        }
+
+        pub fn insertMeta(self: *Txn, meta: core.model.Meta) !void {
+            try self.store.db.exec(
+                \\INSERT INTO meta (id, replica_id, last_hlc)
+                \\VALUES (?, ?, ?)
+            ,
+                .{},
+                meta,
+            );
+        }
+
+        pub fn updateMeta(self: *Txn, meta: core.Ts) !void {
+            try self.store.db.exec(
+                \\UPDATE meta
+                \\SET last_hlc = ?
+                \\WHERE id = 1
+            ,
+                .{},
+                .{meta.toString()},
+            );
+        }
+
+        pub fn insertProject(self: *Txn, project: core.model.Project) !void {
+            try self.store.db.exec(
+                \\INSERT INTO projects (id, name, created_ts, updated_hlc)
+                \\VALUES (?, ?, ?, ?)
+            ,
+                .{},
+                .{
+                    .id = idBlob(&project.id),
+                    .name = project.name,
+                    .created_ts = project.created_ts,
+                    .updated_hlc = project.updated_hlc,
+                },
+            );
+        }
+    };
 };
 
 fn open(path: [:0]const u8) !sqlite.Db {
@@ -98,32 +160,3 @@ fn execScript(db: *sqlite.Db, sql: [:0]const u8) MigrationError!void {
 fn idBlob(id: *const core.Uuid) sqlite.Blob {
     return .{ .data = &id.bytes, .size = id.bytes.len };
 }
-
-pub const Txn = struct {
-    store: *Sqlite,
-    done: bool,
-
-    pub fn commit(self: *Txn) !void {
-        try self.store.db.exec("COMMIT", .{}, .{});
-        self.done = true;
-    }
-
-    pub fn deinit(self: *Txn) void {
-        if (!self.done) self.store.db.exec("ROLLBACK", .{}, .{}) catch {};
-    }
-
-    pub fn insertProject(self: *Txn, project: core.model.Project) !void {
-        try self.store.db.exec(
-            \\INSERT INTO projects (id, name, created_ts, updated_ts)
-            \\VALUES (?, ?, ?, ?)
-        ,
-            .{},
-            .{
-                .id = idBlob(&project.id),
-                .name = project.name,
-                .created_ts = project.created_ts,
-                .updated_ts = project.updated_ts,
-            },
-        );
-    }
-};
