@@ -98,21 +98,16 @@ fn open(path: [:0]const u8) !sqlite.Db {
 
     _ = try db.pragma(i64, .{}, "busy_timeout", "5000");
 
-    const buf: [16:0]u8 = undefined;
-    _ = buf;
-
     const mode = try db.pragma([16:0]u8, .{}, "journal_mode", "wal");
     if (mode == null or !std.mem.eql(u8, std.mem.sliceTo(&mode.?, 0), "wal")) {
         return error.WalUnavailable;
     }
 
-    _ = try db.pragma([16:0]u8, .{}, "synchronous", "normal");
+    _ = try db.pragma(i64, .{}, "synchronous", "normal");
     _ = try db.pragma(i64, .{}, "foreign_keys", "on");
 
     return db;
 }
-
-const MigrationError = error{ DbNewerThanBinary, MigrationFailed } || sqlite.DynamicStatement.PrepareError;
 
 const migrations = [_]Migration{
     .{ .version = 1, .sql = @embedFile("migrations/0001_init.sql") },
@@ -125,28 +120,27 @@ fn latestVersion() i32 {
 }
 
 /// Runs all migrations, up to the latest version.
-fn migrate(db: *sqlite.Db) MigrationError!void {
+fn migrate(db: *sqlite.Db) !void {
+    try db.exec("BEGIN IMMEDIATE", .{}, .{});
+    errdefer db.exec("ROLLBACK", .{}, .{}) catch |err| {
+        std.log.err("failed to run rollback: {}", .{err});
+    };
+
     const current = (try db.pragma(i32, .{}, "user_version", null)) orelse 0;
     if (current > latestVersion()) return error.DbNewerThanBinary;
 
     inline for (migrations) |m| {
         if (m.version > current) {
-            try db.exec("BEGIN IMMEDIATE", .{}, .{});
-            errdefer db.exec("ROLLBACK", .{}, .{}) catch |err| {
-                std.log.err("failed to run rollback: {}", .{err});
-            };
-
             try execScript(db, m.sql);
-            _ = try db.pragma(i32, .{}, "user_version", comptime std.fmt.comptimePrint("{d}", .{m.version}));
-
-            try db.exec("COMMIT", .{}, .{});
         }
     }
+    _ = try db.pragma(i32, .{}, "user_version", comptime std.fmt.comptimePrint("{d}", .{latestVersion()}));
+    try db.exec("COMMIT", .{}, .{});
 }
 
 /// Run a SQL script with sqlite3
 /// zig-sqlite3 doesn't have a wrapper for sqlite3_exec
-fn execScript(db: *sqlite.Db, sql: [:0]const u8) MigrationError!void {
+fn execScript(db: *sqlite.Db, sql: [:0]const u8) !void {
     var err_msg: [*c]u8 = null;
     const rc = sqlite.c.sqlite3_exec(db.db, sql.ptr, null, null, &err_msg);
     if (rc != sqlite.c.SQLITE_OK) {
