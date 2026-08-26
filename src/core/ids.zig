@@ -12,6 +12,12 @@ pub const ReplicaId = struct {
 
 pub const Uuid = struct {
     bytes: [16]u8,
+
+    pub fn hex(self: Uuid) [32]u8 {
+        var buf: [32]u8 = undefined;
+        _ = std.fmt.bufPrint(&buf, "{X}", .{self.bytes}) catch {};
+        return buf;
+    }
 };
 
 pub const V7 = struct {

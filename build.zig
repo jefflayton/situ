@@ -69,7 +69,7 @@ fn buildModules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
 fn buildTests(b: *std.Build, modules: Modules) *std.Build.Step {
     const step = b.step("test", "Run all tests");
 
-    for ([_]*std.Build.Module{ modules.core, modules.store, modules.logic }) |m| {
+    for ([_]*std.Build.Module{ modules.core, modules.store, modules.logic, modules.cli }) |m| {
         const t = b.addTest(.{ .root_module = m });
         step.dependOn(&b.addRunArtifact(t).step);
     }
