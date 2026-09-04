@@ -6,6 +6,10 @@
             .url = "git+https://github.com/vrischmann/zig-sqlite#946d77c526258760b52836187af32d1a192c5d36",
             .hash = "sqlite-3.48.0-F2R_azCQDgBGaWDIX4g2vxKpuqzYEQOOfAeJGMNocPu0",
         },
+        .serde = .{
+            .url = "git+https://github.com/OrlovEvgeny/serde.zig#dd8cc6f97c240c7fb73c69dad2722c806e59a81b",
+            .hash = "serde-1.0.1-1DszT3MjEADZkgXH6IsH3gs1Pm12UGyhagpV22EEch7x",
+        },
     },
     .minimum_zig_version = "0.16.0",
     .paths = .{""},

@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) void {
 
 fn buildModules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) Modules {
     const sqlite = b.dependency("sqlite", .{ .target = target, .optimize = optimize });
+    const serde = b.dependency("serde", .{ .target = target, .optimize = optimize });
 
     const core = b.createModule(.{
         .target = target,
@@ -62,6 +63,7 @@ fn buildModules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     cli.addImport("core", core);
     cli.addImport("logic", logic);
     cli.addImport("store", store);
+    cli.addImport("serde", serde.module("serde"));
 
     return .{ .core = core, .store = store, .logic = logic, .cli = cli };
 }

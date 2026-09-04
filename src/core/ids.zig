@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const ReplicaId = struct {
     value: u64,
+
     pub fn generate(io: std.Io) ReplicaId {
         const rng_impl: std.Random.IoSource = .{ .io = io };
         const rng = &rng_impl.interface();
@@ -14,9 +15,30 @@ pub const Uuid = struct {
     bytes: [16]u8,
 
     pub fn hex(self: Uuid) [32]u8 {
-        var buf: [32]u8 = undefined;
-        _ = std.fmt.bufPrint(&buf, "{X}", .{self.bytes}) catch {};
-        return buf;
+        return std.fmt.bytesToHex(self.bytes, .upper);
+    }
+
+    pub const ParseError = error{InvalidUuid};
+    pub fn parse(s: []const u8) ParseError!Uuid {
+        if (s.len != 32) return error.InvalidUuid;
+        var u: Uuid = .{ .bytes = undefined };
+        _ = std.fmt.hexToBytes(&u.bytes, s) catch return error.InvalidUuid;
+        return u;
+    }
+
+    pub fn zerdeSerialize(self: Uuid, serializer: anytype) !void {
+        const h = self.hex();
+        try serializer.serializeString(&h);
+    }
+
+    pub fn zerdeDeserialize(
+        comptime _: type,
+        allocator: std.mem.Allocator,
+        deserializer: anytype,
+    ) @TypeOf(deserializer.*).Error!Uuid {
+        const str = try deserializer.deserializeString(allocator);
+        defer allocator.free(str);
+        return parse(str) catch return error.WrongType;
     }
 };
 
@@ -61,6 +83,13 @@ pub const V7 = struct {
         return .{ .bytes = u };
     }
 };
+
+test "Uuid.hex" {
+    const u: Uuid = .{ .bytes = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 } };
+    var h = u.hex();
+    const back = try Uuid.parse(&h);
+    try std.testing.expectEqualSlices(u8, &u.bytes, &back.bytes);
+}
 
 test "V7.advance - same ms increments counter" {
     var v7: V7 = .{ .last_ms = 1000, .counter = 5 };
