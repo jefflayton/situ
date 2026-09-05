@@ -1,4 +1,28 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+[settings]
+lockfile = true
+
 [tools]
-"aqua:quarylabs/sqruff" = "latest"
+actionlint = "1.7.12"
+"aqua:quarylabs/sqruff" = "0.38.0"
+"npm:vscode-langservers-extracted" = "4.10.0"
+"npm:yaml-language-server" = "1.24.0"
+oxfmt = "0.66.0"
+taplo = "0.10.0"
 zig = "0.16.0"
 zls = "0.16.0"
+
+[tasks.fmt]
+run = ["zig fmt .", "oxfmt .", "sqruff fix src/store/sqlite/migrations"]
+
+[tasks."fmt:ci"]
+run = ["zig fmt --check .", "oxfmt --check .", "sqruff lint src/store/sqlite/migrations"]
+
+[tasks.lint]
+run = "actionlint"
+
+[tasks.test]
+run = "zig build test"
+
+[tasks.check]
+depends = ["fmt:ci", "lint", "test"]
