@@ -1,6 +1,10 @@
 const std = @import("std");
+const Arena = std.heap.ArenaAllocator;
+
 const core = @import("core");
 const sqlite = @import("sqlite");
+
+const row = @import("row.zig");
 
 pub const Sqlite = struct {
     db: sqlite.Db,
@@ -17,14 +21,16 @@ pub const Sqlite = struct {
         self.db.deinit();
     }
 
-    pub fn begin(self: *Sqlite) !Txn {
+    pub fn begin(self: *Sqlite, gpa: std.mem.Allocator) !Txn {
         try self.db.exec("BEGIN", .{}, .{});
-        return .{ .store = self, .done = false };
+        const arena: Arena = .init(gpa);
+        return .{ .store = self, .done = false, .arena = arena };
     }
 
     pub const Txn = struct {
         store: *Sqlite,
         done: bool,
+        arena: Arena,
 
         pub fn commit(self: *Txn) !void {
             try self.store.db.exec("COMMIT", .{}, .{});
@@ -33,58 +39,50 @@ pub const Sqlite = struct {
 
         pub fn deinit(self: *Txn) void {
             if (!self.done) self.store.db.exec("ROLLBACK", .{}, .{}) catch {};
+            self.arena.deinit();
         }
 
         pub fn getMeta(self: *Txn) !?core.model.Meta {
             var stmt = try self.store.db.prepare(
-                \\SELECT id, replica_id, last_hlc
+                \\SELECT id, project_id, replica_id, last_hlc
                 \\FROM meta
                 \\WHERE id = 1
             );
             defer stmt.deinit();
 
-            const row = try stmt.one(core.model.Meta, .{}, .{});
-            return row;
+            const found = try stmt.oneAlloc(row.MetaRow, self.arena.allocator(), .{}, .{});
+            if (found) |f| return row.MetaRow.toMeta(f);
+            return null;
         }
 
         pub fn insertMeta(self: *Txn, meta: core.model.Meta) !void {
-            try self.store.db.exec(
-                \\INSERT INTO meta (id, replica_id, last_hlc)
-                \\VALUES (?, ?, ?)
+            try self.store.db.execAlloc(
+                self.arena.allocator(),
+                \\INSERT INTO meta (id, project_id, replica_id, last_hlc)
+                \\VALUES (?, ?, ?, ?)
             ,
                 .{},
-                meta,
+                row.MetaRow.fromMeta(meta),
             );
         }
 
-        pub fn updateMeta(self: *Txn, meta: core.Ts) !void {
-            try self.store.db.exec(
+        pub fn updateMeta(self: *Txn, meta: core.model.Meta) !void {
+            const m: row.MetaRow = .fromMeta(meta);
+
+            try self.store.db.execAlloc(
+                self.arena.allocator(),
                 \\UPDATE meta
                 \\SET last_hlc = ?
                 \\WHERE id = 1
             ,
                 .{},
-                .{meta.toString()},
-            );
-        }
-
-        pub fn insertProject(self: *Txn, project: core.model.Project) !void {
-            try self.store.db.exec(
-                \\INSERT INTO projects (id, name, created_ts, updated_hlc)
-                \\VALUES (?, ?, ?, ?)
-            ,
-                .{},
-                .{
-                    .id = idBlob(&project.id),
-                    .name = project.name,
-                    .created_ts = project.created_ts,
-                    .updated_hlc = project.updated_hlc,
-                },
+                .{ .last_hlc = m.last_hlc },
             );
         }
     };
 };
 
+/// Opens a store.db and initiates a sqlite session
 fn open(path: [:0]const u8) !sqlite.Db {
     var db = try sqlite.Db.init(.{
         .mode = sqlite.Db.Mode{ .File = path },
@@ -150,7 +148,6 @@ fn execScript(db: *sqlite.Db, sql: [:0]const u8) !void {
     }
 }
 
-// store/sqlite/store.zig (or a small bind.zig next to it)
-fn idBlob(id: *const core.Uuid) sqlite.Blob {
-    return .{ .data = &id.bytes, .size = id.bytes.len };
+test {
+    _ = @import("row.zig");
 }

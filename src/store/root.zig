@@ -1,5 +1,6 @@
-pub const Sqlite = @import("sqlite/store.zig").Sqlite;
-pub const Txn = @import("sqlite/store.zig").Txn;
+const sq = @import("sqlite/store.zig");
+pub const Sqlite = sq.Sqlite;
+pub const Txn = Sqlite.Txn;
 
 pub fn assertStore(comptime T: type) void {
     const P = switch (@typeInfo(T)) {
@@ -31,10 +32,10 @@ pub fn assertTxn(comptime T: type) void {
         @compileError(@typeName(P) ++ ": deinit invalid params");
     }
 
-    comptime checkDecl(P, "insertProject");
-    const insertProject = @typeInfo(@TypeOf(P.insertProject)).@"fn";
-    if (insertProject.params.len != 2) {
-        @compileError(@typeName(P) ++ ": insertProject invalid params");
+    comptime checkDecl(P, "insertMeta");
+    const insertMeta = @typeInfo(@TypeOf(P.insertMeta)).@"fn";
+    if (insertMeta.params.len != 2) {
+        @compileError(@typeName(P) ++ ": insertMeta invalid params");
     }
 }
 
@@ -42,4 +43,8 @@ fn checkDecl(comptime T: type, decl: []const u8) void {
     if (!@hasDecl(T, decl)) {
         @compileError(@typeName(T) ++ ": missing " ++ decl);
     }
+}
+
+test {
+    _ = @import("sqlite/store.zig");
 }

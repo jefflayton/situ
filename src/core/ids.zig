@@ -1,4 +1,5 @@
 const std = @import("std");
+const sqlite = @import("sqlite");
 
 pub const ReplicaId = struct {
     value: u64,
@@ -26,11 +27,13 @@ pub const Uuid = struct {
         return u;
     }
 
+    /// Custom Serializer for serde.zig
     pub fn zerdeSerialize(self: Uuid, serializer: anytype) !void {
         const h = self.hex();
         try serializer.serializeString(&h);
     }
 
+    /// Custom Deserializer for serde.zig
     pub fn zerdeDeserialize(
         comptime _: type,
         allocator: std.mem.Allocator,
