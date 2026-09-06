@@ -2,6 +2,8 @@ const sq = @import("sqlite/store.zig");
 pub const Sqlite = sq.Sqlite;
 pub const Txn = Sqlite.Txn;
 
+pub const Error = error{ OutOfMemory, Busy, Conflict, Corrupt, Migration, Io, NotFound };
+
 pub fn assertStore(comptime T: type) void {
     const P = switch (@typeInfo(T)) {
         .pointer => |p| p.child,

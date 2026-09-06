@@ -1,5 +1,6 @@
 create table meta (
     id integer primary key check (id = 1),
+    project_name text not null,
     project_id blob not null check (length(project_id) = 16),
     replica_id integer not null,
     last_hlc text not null check (length(last_hlc) = 21)

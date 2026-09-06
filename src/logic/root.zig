@@ -7,11 +7,12 @@ pub const meta = @import("meta.zig");
 
 pub const Ctx = struct {
     io: std.Io,
-    project_id: core.Uuid,
-    replica_id: core.ReplicaId,
-    ids: *core.V7,
-    clock: *core.Clock,
     gpa: std.mem.Allocator,
+    project_id: ?core.Uuid = null,
+    replica_id: ?core.ReplicaId = null,
+    ids: ?*core.V7 = null,
+    clock: ?*core.Clock = null,
+    diag: ?*core.Diagnostic = null,
 };
 
 pub fn withTxn(
@@ -19,14 +20,14 @@ pub fn withTxn(
     ctx: *Ctx,
     args: anytype,
     comptime f: anytype,
-) @TypeOf(f(
+) !Payload(@TypeOf(f(
     @as(*TxnOf(@TypeOf(s)), undefined),
     ctx,
     args,
-)) {
+))) {
     comptime store.assertStore(@TypeOf(s));
 
-    var txn = try s.begin(ctx.gpa);
+    var txn = try s.begin(ctx.gpa, ctx.diag);
     defer txn.deinit();
 
     const result = try f(&txn, ctx, args);
@@ -39,5 +40,12 @@ fn TxnOf(comptime Store: type) type {
     return switch (@typeInfo(Store)) {
         .pointer => |p| p.child.Txn,
         else => Store.Txn,
+    };
+}
+
+fn Payload(comptime T: type) type {
+    return switch (@typeInfo(T)) {
+        .error_union => |eu| eu.payload,
+        else => T,
     };
 }

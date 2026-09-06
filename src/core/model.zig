@@ -5,6 +5,7 @@ const Ts = core.Ts;
 
 pub const Meta = struct {
     id: i2,
+    project_name: []const u8,
     project_id: Uuid,
     replica_id: ReplicaId,
     last_hlc: Ts,
@@ -15,10 +16,6 @@ pub const Workspace = struct {
     name: []const u8,
     created_ts: u64,
     updated_hlc: Ts,
-};
-
-pub const NewProject = struct {
-    name: []const u8,
 };
 
 pub const Note = struct {

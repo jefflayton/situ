@@ -5,23 +5,30 @@ const store = @import("store");
 
 const logic = @import("root.zig");
 
-pub fn createIfNotExists(txn: anytype, ctx: *logic.Ctx, args: anytype) !core.model.Meta {
+pub fn createIfNotExists(txn: anytype, ctx: *logic.Ctx, args: anytype) store.Error!core.model.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
-    const found_meta = try txn.getMeta();
-    if (found_meta) |m| return m;
-
-    return try create(txn, ctx, args);
+    return txn.getMeta() catch |err| switch (err) {
+        error.NotFound => try create(txn, ctx, args),
+        else => |e| return e,
+    };
 }
 
-pub fn create(txn: anytype, ctx: *logic.Ctx, _: anytype) !core.model.Meta {
+pub fn read(txn: anytype, _: *logic.Ctx, _: anytype) store.Error!core.model.Meta {
+    comptime store.assertTxn(@TypeOf(txn));
+
+    return try txn.getMeta();
+}
+
+pub fn create(txn: anytype, ctx: *logic.Ctx, args: anytype) store.Error!core.model.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     const zero: core.Ts = .{ .wall = 0 };
     const meta: core.model.Meta = .{
         .id = 1,
-        .project_id = ctx.project_id,
-        .replica_id = ctx.replica_id,
+        .project_name = args.project_name,
+        .project_id = ctx.project_id.?,
+        .replica_id = ctx.replica_id.?,
         .last_hlc = zero,
     };
 
@@ -30,14 +37,15 @@ pub fn create(txn: anytype, ctx: *logic.Ctx, _: anytype) !core.model.Meta {
     return meta;
 }
 
-pub fn flush(txn: anytype, ctx: *logic.Ctx, _: anytype) !void {
+pub fn flush(txn: anytype, ctx: *logic.Ctx, _: anytype) store.Error!void {
     comptime store.assertTxn(@TypeOf(txn));
 
     const meta: core.model.Meta = .{
         .id = 1,
-        .project_id = ctx.project_id,
-        .replica_id = ctx.replica_id,
-        .last_hlc = ctx.clock.last,
+        .project_name = undefined,
+        .project_id = ctx.project_id.?,
+        .replica_id = ctx.replica_id.?,
+        .last_hlc = ctx.clock.?.last,
     };
 
     try txn.updateMeta(meta);

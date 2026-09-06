@@ -6,13 +6,35 @@ const builtin = @import("builtin");
 
 const core = @import("core");
 
-pub const PathError = error{NoHomeDirectory};
+pub const Error = error{ BadPath, NoHomeDirectory } ||
+    Allocator.Error ||
+    Io.Dir.OpenError ||
+    Io.Dir.CreateDirPathOpenError ||
+    Io.Dir.StatError;
+
+/// Information on a found file or directory
+pub const Found = struct {
+    dir: Io.Dir,
+    path: [:0]u8,
+    linked: bool = false,
+
+    pub fn deinit(self: *Found, io: Io, gpa: Allocator) void {
+        self.dir.close(io);
+        gpa.free(self.path);
+    }
+};
 
 /// Resolves a path between the XDG and $HOME variables.
 /// Precedence Order:
 ///   - $XDG_*
 ///   - $HOME
-fn xdgPath(gpa: Allocator, xdg: ?[]const u8, home: ?[]const u8, default_tail: []const []const u8, rest: []const []const u8) ![:0]u8 {
+fn xdgPath(
+    gpa: Allocator,
+    xdg: ?[]const u8,
+    home: ?[]const u8,
+    default_tail: []const []const u8,
+    rest: []const []const u8,
+) Error![:0]u8 {
     var buf: [4][]const u8 = undefined;
     const base: []const []const u8 = if (xdg) |x| blk: {
         buf[0] = x;
@@ -22,7 +44,7 @@ fn xdgPath(gpa: Allocator, xdg: ?[]const u8, home: ?[]const u8, default_tail: []
         @memcpy(buf[1..][0..default_tail.len], default_tail);
         break :blk buf[0 .. 1 + default_tail.len];
     } else {
-        return PathError.NoHomeDirectory;
+        return error.NoHomeDirectory;
     };
 
     const path = try std.mem.concat(gpa, []const u8, &.{ base, rest });
@@ -31,11 +53,11 @@ fn xdgPath(gpa: Allocator, xdg: ?[]const u8, home: ?[]const u8, default_tail: []
     return try std.fs.path.joinZ(gpa, path);
 }
 
-/// Finds the situ/project/{uuid}/store.db file
+/// Finds the situ/projects/{uuid}/store.db file
 /// Precedence Order:
-///   - $XDG_DATA_HOME/situ/project/{uuid}/store.db
-///   - $HOME/.local/share/situ/project/{uuid}/store.db
-pub fn projectDb(gpa: Allocator, environ: *Environ, id: core.Uuid) ![:0]u8 {
+///   - $XDG_DATA_HOME/situ/projects/{uuid}/store.db
+///   - $HOME/.local/share/situ/projects/{uuid}/store.db
+pub fn projectDb(gpa: Allocator, environ: *Environ, id: core.Uuid) Error![:0]u8 {
     const home = environ.get("HOME");
     const xdg = environ.get("XDG_DATA_HOME");
 
@@ -43,34 +65,42 @@ pub fn projectDb(gpa: Allocator, environ: *Environ, id: core.Uuid) ![:0]u8 {
     return try xdgPath(gpa, xdg, home, &.{ ".local", "share" }, &.{ "situ", "projects", h, "store.db" });
 }
 
+/// Finds the situ/projects directory
+/// Precedence Order:
+///   - $XDG_DATA_HOME/situ/projects
+///   - $HOME/.local/share/situ/projects
+pub fn projectsDir(io: Io, gpa: Allocator, environ: *Environ) Error!Found {
+    const home = environ.get("HOME");
+    const xdg = environ.get("XDG_DATA_HOME");
+
+    const path = try xdgPath(gpa, xdg, home, &.{ ".local", "share" }, &.{
+        "situ",
+        "projects",
+    });
+
+    const dir = Io.Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => try Io.Dir.createDirPathOpen(.cwd(), io, path, .{}),
+        else => |e| return e,
+    };
+
+    return .{ .dir = dir, .path = path };
+}
+
 /// Finds the situ/config.toml file
 /// Precedence Order:
 ///   - $XDG_CONFIG_HOME/situ/config.toml
 ///   - $HOME/.config/situ/config.toml
-pub fn configToml(gpa: Allocator, environ: *Environ) ![:0]u8 {
+pub fn configToml(gpa: Allocator, environ: *Environ) Error![:0]u8 {
     const home = environ.get("HOME");
     const xdg = environ.get("XDG_CONFIG_HOME");
 
     return try xdgPath(gpa, xdg, home, &.{".config"}, &.{ "situ", "config.toml" });
 }
 
-/// Information on the nearest situ.toml
-pub const Found = struct {
-    dir: Io.Dir,
-    path: [:0]u8,
-    /// situ.toml could be a symlink in a secondary checkout
-    linked: bool,
-
-    pub fn deinit(self: *Found, io: Io, gpa: Allocator) void {
-        self.dir.close(io);
-        gpa.free(self.path);
-    }
-};
-
 const DEPTH_CAP = 64;
 
 /// Finds the nearest situ.toml, checking the `start` dir and walking up through its ancestors.
-pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir) !?Found {
+pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: ?*core.Diagnostic) Error!?Found {
     var dir = try start.openDir(io, ".", .{});
     errdefer dir.close(io);
 
@@ -79,12 +109,18 @@ pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir) !?Found {
         if (dir.statFile(io, "situ.toml", .{ .follow_symlinks = false })) |st| {
             return .{
                 .dir = dir,
-                .path = try dir.realPathFileAlloc(io, ".", gpa),
+                .path = dir.realPathFileAlloc(io, ".", gpa) catch |err| {
+                    if (diag) |d| d.set(".", "", "get filepath", err);
+                    return error.BadPath;
+                },
                 .linked = st.kind == .sym_link,
             };
         } else |err| switch (err) {
             error.FileNotFound => {},
-            else => |e| return e,
+            else => |e| {
+                if (diag) |d| d.set("situ.toml", "", "stat file", e);
+                return error.BadPath;
+            },
         }
 
         var parent = try dir.openDir(io, "..", .{});
@@ -101,7 +137,7 @@ pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir) !?Found {
 }
 
 /// Check if two directories are the same by comparing their `inode` stat.
-fn sameDir(io: Io, a: Io.Dir, b: Io.Dir) !bool {
+fn sameDir(io: Io, a: Io.Dir, b: Io.Dir) Error!bool {
     const sa = try a.stat(io);
     const sb = try b.stat(io);
     return sa.inode == sb.inode;
@@ -115,7 +151,7 @@ test "xdgPath" {
         default_tail: []const []const u8 = &.{},
         rest: []const []const u8 = &.{"situ"},
         want: ?[]const u8 = null,
-        err: ?PathError = null,
+        err: ?Error = null,
     };
 
     const cases = [_]Case{
@@ -127,7 +163,7 @@ test "xdgPath" {
             .want = "/h/.local/share/situ",
         },
         .{ .xdg = "/x", .home = null, .want = "/x/situ" },
-        .{ .xdg = null, .home = null, .err = PathError.NoHomeDirectory },
+        .{ .xdg = null, .home = null, .err = Error.NoHomeDirectory },
     };
 
     for (cases) |c| {
