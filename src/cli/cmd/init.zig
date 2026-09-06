@@ -40,7 +40,7 @@ pub fn run(context: *Context, _: *ArgsIter) cmd.CommandError!void {
 
     const replica_id: core.ReplicaId = .generate(io);
     var boot_clock: core.Clock = .{};
-    var boot_ctx: logic.Ctx = .{
+    var boot_ctx: logic.Context = .{
         .io = io,
         .gpa = gpa,
         .project_id = project_id,
@@ -57,7 +57,7 @@ pub fn run(context: *Context, _: *ArgsIter) cmd.CommandError!void {
     );
 
     var clock: core.Clock = .initFrom(meta.last_hlc);
-    var ctx: logic.Ctx = .{
+    var ctx: logic.Context = .{
         .io = io,
         .project_id = project_id,
         .replica_id = replica_id,

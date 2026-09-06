@@ -117,7 +117,7 @@ pub fn listProjects(self: *Context) Error!ArrayList(Project) {
         var s = try self.getStore(uuid);
         defer s.deinit();
 
-        var ctx: logic.Ctx = .{
+        var ctx: logic.Context = .{
             .io = self.io,
             .gpa = self.gpa,
             .project_id = uuid,

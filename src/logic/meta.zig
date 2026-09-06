@@ -5,7 +5,7 @@ const store = @import("store");
 
 const logic = @import("root.zig");
 
-pub fn createIfNotExists(txn: anytype, ctx: *logic.Ctx, args: anytype) store.Error!core.model.Meta {
+pub fn createIfNotExists(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.model.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     return txn.getMeta() catch |err| switch (err) {
@@ -14,13 +14,13 @@ pub fn createIfNotExists(txn: anytype, ctx: *logic.Ctx, args: anytype) store.Err
     };
 }
 
-pub fn read(txn: anytype, _: *logic.Ctx, _: anytype) store.Error!core.model.Meta {
+pub fn read(txn: anytype, _: *logic.Context, _: anytype) store.Error!core.model.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     return try txn.getMeta();
 }
 
-pub fn create(txn: anytype, ctx: *logic.Ctx, args: anytype) store.Error!core.model.Meta {
+pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.model.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     const zero: core.Ts = .{ .wall = 0 };
@@ -37,7 +37,7 @@ pub fn create(txn: anytype, ctx: *logic.Ctx, args: anytype) store.Error!core.mod
     return meta;
 }
 
-pub fn flush(txn: anytype, ctx: *logic.Ctx, _: anytype) store.Error!void {
+pub fn flush(txn: anytype, ctx: *logic.Context, _: anytype) store.Error!void {
     comptime store.assertTxn(@TypeOf(txn));
 
     const meta: core.model.Meta = .{

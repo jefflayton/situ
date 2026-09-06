@@ -5,7 +5,7 @@ const store = @import("store");
 
 pub const meta = @import("meta.zig");
 
-pub const Ctx = struct {
+pub const Context = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
     project_id: ?core.Uuid = null,
@@ -17,7 +17,7 @@ pub const Ctx = struct {
 
 pub fn withTxn(
     s: anytype,
-    ctx: *Ctx,
+    ctx: *Context,
     args: anytype,
     comptime f: anytype,
 ) !Payload(@TypeOf(f(
