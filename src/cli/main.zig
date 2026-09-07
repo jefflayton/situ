@@ -8,12 +8,13 @@ const core = @import("core");
 const logic = @import("logic");
 const store = @import("store");
 
-const run = @import("cmd/init.zig").run;
-const cmd_map = @import("cmd/root.zig").map;
+const args_mod = @import("args.zig");
+const cmd = @import("cmd/root.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
 const paths = @import("paths.zig");
 const WorkspaceConfig = @import("WorkspaceConfig.zig");
+const help = @import("help.zig");
 
 const BUF_SIZE = 256;
 pub fn main(init: std.process.Init) u8 {
@@ -22,17 +23,26 @@ pub fn main(init: std.process.Init) u8 {
         .gpa = init.gpa,
         .environ = init.environ_map,
     };
-
     var args = init.minimal.args.iterate();
 
-    const cmd = cmd_map.get("init");
-    if (cmd) |c| {
-        c(&context, &args) catch |err| {
+    const parsed = args_mod.parse(&args) catch {
+        // TODO: Output Usage to STDERR
+        return 2;
+    };
+
+    switch (parsed) {
+        .version => {
+            // TODO: Output version
+            return 0;
+        },
+        .help => |c| {
+            help.print(&context, c);
+            return 0;
+        },
+        .command => cmd.dispatch(&context, parsed) catch |err| {
             reportError(err, &context.diag);
             return 1;
-        };
-    } else {
-        std.log.err("error: unknown command {s}", .{"UNIMPLEMENTED"});
+        },
     }
     return 0;
 }
@@ -49,6 +59,7 @@ fn reportError(err: anyerror, d: *const core.Diagnostic) void {
 }
 
 test {
+    _ = @import("args.zig");
     _ = @import("paths.zig");
     _ = @import("WorkspaceConfig.zig");
 }
