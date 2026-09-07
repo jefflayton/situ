@@ -12,19 +12,24 @@ const Error = error{ UnknownArg, MissingValue, InvalidBundle };
 pub fn parse(args: *ArgsIter) Error!cmd.Parsed {
     _ = args.next() orelse return error.UnknownArg; // program name
 
+    var root: cmd.Root = .{};
     var global: cmd.Global = .{};
-    while (args.next()) |a| {
+    outer: while (args.next()) |a| {
         if (a.len == 0) continue;
         if (std.mem.eql(u8, a, "--")) break;
+        if (root.help or root.version) return .{ .root = root };
 
-        // TODO: Read struct, not manual check
-        if (std.mem.eql(u8, a, "--version")) {
-            return .version;
-        }
-        // TODO: Read struct, not manual check
-        if (std.mem.eql(u8, a, "--help")) {
-            global.help = true;
-            continue;
+        if (a.len > 2 and std.mem.startsWith(u8, a, "--")) {
+            const name = a[2..];
+            if (try tryLong(cmd.Root, &root, name, args)) continue :outer;
+        } else if (a.len > 1 and std.mem.startsWith(u8, a, "-")) {
+            for (a[1..], 0..) |ch, i| {
+                const is_last = i == a.len - 2;
+
+                if (try tryShort(cmd.Root, &root, ch, is_last, args)) continue :outer;
+                return error.UnknownArg;
+            }
+            continue :outer;
         }
 
         if (std.meta.stringToEnum(cmd.Command, a)) |c| {
@@ -32,7 +37,6 @@ pub fn parse(args: *ArgsIter) Error!cmd.Parsed {
                 inline else => |tag| {
                     const T = @FieldType(@FieldType(cmd.Parsed, "command"), @tagName(tag));
                     const opts = try parseInto(T, args, &global);
-                    if (global.help) return .{ .help = c };
                     return .{ .command = @unionInit(
                         @FieldType(cmd.Parsed, "command"),
                         @tagName(tag),
@@ -42,11 +46,10 @@ pub fn parse(args: *ArgsIter) Error!cmd.Parsed {
             }
         }
 
-        // Fix: better unknown arg handling
-        if (!global.help) return error.UnknownArg;
+        return error.UnknownArg;
     }
 
-    return .{ .help = null };
+    return .{ .root = root };
 }
 
 /// Writes to the argument in target
@@ -98,17 +101,10 @@ fn tryLong(comptime T: type, target: *T, name: []const u8, args: *ArgsIter) Erro
     return false;
 }
 
-/// Finds and returns the short form of a field, if one exists
-fn shortOf(comptime T: type, comptime field: []const u8) ?u8 {
-    if (!@hasDecl(T, "short")) return null;
-    if (!@hasField(@TypeOf(T.short), field)) return null;
-    return @field(T.short, field);
-}
-
 /// Attempts to find the argument in target by its short form and write to it
 fn tryShort(comptime T: type, target: *T, ch: u8, is_last: bool, args: *ArgsIter) Error!bool {
     inline for (@typeInfo(T).@"struct".fields) |f| {
-        if (shortOf(T, f.name) == ch) {
+        if (cmd.shortOf(T, f.name) == ch) {
             if (@typeInfo(f.type) == .optional and !is_last) return error.InvalidBundle;
             try assign(T, target, f, args);
             return true;
@@ -130,31 +126,35 @@ test "parse" {
         },
         .{
             .args = .{ .vector = &.{ "dud", "--version" } },
-            .expect = .{ .want = .version },
+            .expect = .{ .want = .{ .root = .{ .version = true } } },
         },
         .{
             .args = .{ .vector = &.{ "dud", "--help" } },
-            .expect = .{ .want = .{ .help = null } },
+            .expect = .{ .want = .{ .root = .{ .help = true } } },
+        },
+        // .{
+        //     .args = .{ .vector = &.{ "dud", "-h" } },
+        //     .expect = .{ .want = .{ .root = .{ .help = true } } },
+        // },
+        .{
+            .args = .{ .vector = &.{ "dud", "--help", "init" } },
+            .expect = .{ .want = .{ .root = .{ .help = true } } },
         },
         .{
             .args = .{ .vector = &.{"dud"} },
-            .expect = .{ .want = .{ .help = null } },
+            .expect = .{ .want = .{ .root = .{} } },
         },
         .{
             .args = .{ .vector = &.{ "dud", "--", "init" } },
-            .expect = .{ .want = .{ .help = null } },
+            .expect = .{ .want = .{ .root = .{} } },
         },
         .{
             .args = .{ .vector = &.{ "dud", "init" } },
             .expect = .{ .want = .{ .command = .{ .init = .{} } } },
         },
         .{
-            .args = .{ .vector = &.{ "dud", "--help", "init" } },
-            .expect = .{ .want = .{ .help = cmd.Command.init } },
-        },
-        .{
             .args = .{ .vector = &.{ "dud", "init", "--help" } },
-            .expect = .{ .want = .{ .help = cmd.Command.init } },
+            .expect = .{ .want = .{ .command = .{ .init = .{ .help = true } } } },
         },
     };
 
@@ -175,6 +175,11 @@ test "parseInto" {
     const Opts = struct {
         flag: bool = false,
         option: ?[]const u8 = null,
+
+        pub const flags = .{
+            .flag = .{ .short = 'f' },
+            .option = .{ .short = 'o' },
+        };
     };
 
     const Case = struct {
@@ -206,10 +211,6 @@ test "parseInto" {
             .args = .{ .vector = &.{ "--", "--flag", "--option", "val" } },
             .expect = .{ .want = .{ .opts = .{}, .global = .{} } },
         },
-        .{
-            .args = .{ .vector = &.{"--help"} },
-            .expect = .{ .want = .{ .opts = .{}, .global = .{ .help = true } } },
-        },
     };
 
     for (cases) |c| {
@@ -230,7 +231,12 @@ test "parseInto" {
 test "tryLong" {
     const Opts = struct {
         flag: bool = false,
-        optional: ?[]const u8 = null,
+        option: ?[]const u8 = null,
+
+        pub const flags = .{
+            .flag = .{ .short = 'f' },
+            .option = .{ .short = 'o' },
+        };
     };
 
     const Case = struct {
@@ -250,12 +256,12 @@ test "tryLong" {
         },
         .{
             .args = .{ .vector = &.{"val"} },
-            .name = "optional",
-            .expect = .{ .want = .{ .ok = true, .target = .{ .optional = "val" } } },
+            .name = "option",
+            .expect = .{ .want = .{ .ok = true, .target = .{ .option = "val" } } },
         },
         .{
             .args = .{ .vector = &.{} },
-            .name = "optional",
+            .name = "option",
             .expect = .{ .err = error.MissingValue },
         },
         .{
@@ -283,8 +289,11 @@ test "tryLong" {
 test "tryShort" {
     const Opts = struct {
         flag: bool = false,
-        optional: ?[]const u8 = null,
-        pub const short = .{ .flag = 'f', .optional = 'o' };
+        option: ?[]const u8 = null,
+        pub const flags = .{
+            .flag = .{ .short = 'f' },
+            .option = .{ .short = 'o' },
+        };
     };
 
     const Case = struct {
@@ -307,7 +316,7 @@ test "tryShort" {
             .args = .{ .vector = &.{"val"} },
             .name = 'o',
             .is_last = true,
-            .expect = .{ .want = .{ .ok = true, .target = .{ .optional = "val" } } },
+            .expect = .{ .want = .{ .ok = true, .target = .{ .option = "val" } } },
         },
         .{
             .args = .{ .vector = &.{"val"} },

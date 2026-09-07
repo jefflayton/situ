@@ -17,30 +17,53 @@ const WorkspaceConfig = @import("WorkspaceConfig.zig");
 const help = @import("help.zig");
 
 const BUF_SIZE = 256;
+const ERR_BUF_SIZE = 1024;
 pub fn main(init: std.process.Init) u8 {
-    var context: Context = .{
+    var stdin_buf: [BUF_SIZE]u8 = undefined;
+    var stdin_file = std.Io.File.stdin();
+    var stdin_reader = stdin_file.reader(init.io, &stdin_buf);
+    const stdin = &stdin_reader.interface;
+
+    var stdout_buf: [BUF_SIZE]u8 = undefined;
+    var stdout_file = std.Io.File.stdout();
+    var stdout_writer = stdout_file.writer(init.io, &stdout_buf);
+    const stdout = &stdout_writer.interface;
+
+    var stderr_buf: [ERR_BUF_SIZE]u8 = undefined;
+    var stderr_file = std.Io.File.stdout();
+    var stderr_writer = stderr_file.writer(init.io, &stderr_buf);
+    const stderr = &stderr_writer.interface;
+
+    var ctx: Context = .{
         .io = init.io,
         .gpa = init.gpa,
         .environ = init.environ_map,
+        .stdin = stdin,
+        .stdout = stdout,
+        .stderr = stderr,
     };
     var args = init.minimal.args.iterate();
 
     const parsed = args_mod.parse(&args) catch {
-        // TODO: Output Usage to STDERR
+        help.usage(&ctx, null) catch |err| {
+            reportError(err, &ctx.diag);
+            return 1;
+        };
         return 2;
     };
 
     switch (parsed) {
-        .version => {
-            // TODO: Output version
-            return 0;
+        .root => |r| {
+            if (r.help)
+                help.print(&ctx, null) catch |err| {
+                    reportError(err, &ctx.diag);
+                    return 1;
+                }
+            else if (r.version)
+                std.log.info("1.0", .{});
         },
-        .help => |c| {
-            help.print(&context, c);
-            return 0;
-        },
-        .command => cmd.dispatch(&context, parsed) catch |err| {
-            reportError(err, &context.diag);
+        .command => cmd.dispatch(&ctx, parsed) catch |err| {
+            reportError(err, &ctx.diag);
             return 1;
         },
     }
@@ -51,10 +74,14 @@ fn reportError(err: anyerror, d: *const core.Diagnostic) void {
     switch (err) {
         error.AlreadyInitialized => std.log.err("already a situ workspace", .{}),
         error.OutOfMemory => std.log.err("out of memory", .{}),
-        else => if (d.path()) |p|
-            std.log.err("{s}: {s}: {t}", .{ p, d.op orelse "?", err })
-        else
-            std.log.err("{t}", .{err}),
+        else => {
+            std.log.err("{s} - {s}: {s}: {t}", .{
+                d.path() orelse "",
+                d.detail() orelse "",
+                d.op orelse "?",
+                err,
+            });
+        },
     }
 }
 

@@ -13,9 +13,16 @@ const cmd = @import("root.zig");
 const Context = @import("../Context.zig");
 const paths = @import("../paths.zig");
 
-pub const about = "Initialize a Situ workspace in the current directory";
 pub const Opts = struct {
     // no flags yet
+    help: bool = false,
+
+    pub const flags = .{
+        .help = .{ .short = 'h', .about = "Print help" },
+    };
+
+    pub const about: []const u8 = "Initialize a Situ workspace in the current directory";
+    pub const usage: []const u8 = "[OPTIONS]";
 };
 
 pub fn run(context: *Context, _: *const Opts) cmd.CommandError!void {

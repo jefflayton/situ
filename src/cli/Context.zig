@@ -15,6 +15,9 @@ io: Io,
 gpa: Allocator,
 environ: *Environ,
 diag: core.Diagnostic = .{},
+stdin: *Io.Reader,
+stdout: *Io.Writer,
+stderr: *Io.Writer,
 
 pub const Error = error{BadPath} ||
     store.Error ||

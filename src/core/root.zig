@@ -17,33 +17,36 @@ pub const Diagnostic = struct {
     op: ?[]const u8 = null,
     cause: ?anyerror = null,
 
-    pub fn path(d: *const Diagnostic) ?[]const u8 {
-        return if (d.path_len == 0) null else d.path_buf[0..d.path_len];
+    pub fn path(self: *const Diagnostic) ?[]const u8 {
+        return if (self.path_len == 0) null else self.path_buf[0..self.path_len];
+    }
+    pub fn detail(self: *const Diagnostic) ?[]const u8 {
+        return if (self.detail_len == 0) null else self.detail_buf[0..self.detail_len];
     }
 
     pub fn set(
-        d: *Diagnostic,
+        self: *Diagnostic,
         p: []const u8,
-        detail: []const u8,
+        d: []const u8,
         op: ?[]const u8,
         cause: anyerror,
     ) void {
-        d.setPath(p);
-        d.setDetail(detail);
-        d.op = op;
-        d.cause = cause;
+        self.setPath(p);
+        self.setDetail(d);
+        self.op = op;
+        self.cause = cause;
     }
 
-    pub fn setPath(d: *Diagnostic, p: []const u8) void {
-        const n = @min(p.len, d.path_buf.len);
-        @memcpy(d.path_buf[0..n], p[0..n]);
-        d.path_len = n;
+    pub fn setPath(self: *Diagnostic, p: []const u8) void {
+        const n = @min(p.len, self.path_buf.len);
+        @memcpy(self.path_buf[0..n], p[0..n]);
+        self.path_len = n;
     }
 
-    pub fn setDetail(d: *Diagnostic, detail: []const u8) void {
-        const n = @min(detail.len, d.path_buf.len);
-        @memcpy(d.detail_buf[0..n], detail[0..n]);
-        d.detail_len = n;
+    pub fn setDetail(self: *Diagnostic, d: []const u8) void {
+        const n = @min(d.len, self.path_buf.len);
+        @memcpy(self.detail_buf[0..n], d[0..n]);
+        self.detail_len = n;
     }
 };
 
