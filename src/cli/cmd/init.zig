@@ -12,6 +12,7 @@ const cmd = @import("root.zig");
 
 const Context = @import("../Context.zig");
 const paths = @import("../paths.zig");
+const prompt = @import("../prompt.zig");
 
 pub const Opts = struct {
     // no flags yet
@@ -25,29 +26,39 @@ pub const Opts = struct {
     pub const usage: []const u8 = "[OPTIONS]";
 };
 
-pub fn run(context: *Context, _: *const Opts) cmd.CommandError!void {
-    const io = context.io;
-    const gpa = context.gpa;
+pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
+    const io = ctx.io;
+    const gpa = ctx.gpa;
+    var ids: core.V7 = .{};
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
 
-    var root = try paths.findWorkspaceRoot(io, gpa, .cwd(), &context.diag);
+    var root = try paths.findWorkspaceRoot(io, gpa, .cwd(), &ctx.diag);
     if (root) |*r| {
         defer r.deinit(io, gpa);
         return if (r.linked) error.LinkedCheckout else error.AlreadyInitialized;
     }
 
-    var project_ids = try context.listProjects();
-    defer project_ids.deinit();
+    var projects = try ctx.listProjects();
+    defer projects.deinit();
 
-    std.debug.print("project_ids:\n", .{});
-    for (project_ids.items) |p| {
-        std.debug.print("  {s}: {s}\n", .{ p.id.hex(), p.name });
+    const project_names: [][]const u8 = try ctx.gpa.alloc([]const u8, projects.items.len);
+    defer ctx.gpa.free(project_names);
+    for (projects.items, 0..) |p, i| project_names[i] = p.name;
+
+    const p_idx = try prompt.choose(ctx, []const u8, project_names, "Project");
+
+    var project_id: core.Uuid = undefined;
+    var project_name: []const u8 = undefined;
+    if (p_idx) |i| {
+        project_id = projects.items[i].id;
+        project_name = projects.items[i].name;
+    } else {
+        project_id = try ids.generate(io);
+        project_name = try prompt.text(ctx, arena.allocator(), "Project Name");
     }
 
-    var ids: core.V7 = .{};
-    const project_name = "Situ";
-    const project_id = try ids.generate(io);
-
-    var s = try context.getStore(project_id);
+    var s = try ctx.getStore(project_id);
     defer s.deinit();
 
     const replica_id: core.ReplicaId = .generate(io);
@@ -55,6 +66,8 @@ pub fn run(context: *Context, _: *const Opts) cmd.CommandError!void {
     var boot_ctx: logic.Context = .{
         .io = io,
         .gpa = gpa,
+        .arena = arena.allocator(),
+        .diag = &ctx.diag,
         .project_id = project_id,
         .replica_id = replica_id,
         .ids = &ids,
@@ -69,15 +82,36 @@ pub fn run(context: *Context, _: *const Opts) cmd.CommandError!void {
     );
 
     var clock: core.Clock = .initFrom(meta.last_hlc);
-    var ctx: logic.Context = .{
+    var txn_ctx: logic.Context = .{
         .io = io,
+        .gpa = gpa,
+        .arena = arena.allocator(),
+        .diag = &ctx.diag,
         .project_id = project_id,
         .replica_id = replica_id,
         .ids = &ids,
         .clock = &clock,
-        .gpa = gpa,
     };
-    defer logic.withTxn(&s, &ctx, .{}, logic.meta.flush) catch |err| {
+    defer logic.withTxn(&s, &txn_ctx, .{}, logic.meta.flush) catch |err| {
         std.log.warn("failed to persist last_hlc: {t}", .{err});
     };
+
+    const workspaces = try logic.withTxn(&s, &txn_ctx, .{}, logic.workspaces.list);
+
+    var wkspc_names: [][]const u8 = try ctx.gpa.alloc([]const u8, workspaces.len);
+    defer ctx.gpa.free(wkspc_names);
+    for (workspaces, 0..) |w, i| wkspc_names[i] = w.name;
+
+    const w_idx = try prompt.choose(ctx, []const u8, wkspc_names, "Workspace");
+
+    var wkspc_id: core.Uuid = undefined;
+    var wkspc_name: []const u8 = undefined;
+    if (w_idx) |i| {
+        wkspc_id = workspaces[i].id;
+        wkspc_name = workspaces[i].name;
+    } else {
+        wkspc_id = try ids.generate(io);
+        wkspc_name = try prompt.text(ctx, arena.allocator(), "Workspace Name");
+        try logic.withTxn(&s, &txn_ctx, .{ .name = wkspc_name }, logic.workspaces.create);
+    }
 }

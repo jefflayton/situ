@@ -5,7 +5,7 @@ const store = @import("store");
 
 const logic = @import("root.zig");
 
-pub fn createIfNotExists(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.model.Meta {
+pub fn createIfNotExists(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     return txn.getMeta() catch |err| switch (err) {
@@ -14,17 +14,17 @@ pub fn createIfNotExists(txn: anytype, ctx: *logic.Context, args: anytype) store
     };
 }
 
-pub fn read(txn: anytype, _: *logic.Context, _: anytype) store.Error!core.model.Meta {
+pub fn read(txn: anytype, _: *logic.Context, _: anytype) store.Error!core.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     return try txn.getMeta();
 }
 
-pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.model.Meta {
+pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.Meta {
     comptime store.assertTxn(@TypeOf(txn));
 
     const zero: core.Ts = .{ .wall = 0 };
-    const meta: core.model.Meta = .{
+    const meta: core.Meta = .{
         .id = 1,
         .project_name = args.project_name,
         .project_id = ctx.project_id.?,
@@ -40,7 +40,7 @@ pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core
 pub fn flush(txn: anytype, ctx: *logic.Context, _: anytype) store.Error!void {
     comptime store.assertTxn(@TypeOf(txn));
 
-    const meta: core.model.Meta = .{
+    const meta: core.Meta = .{
         .id = 1,
         .project_name = undefined,
         .project_id = ctx.project_id.?,

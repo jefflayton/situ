@@ -3,11 +3,15 @@ const std = @import("std");
 const clock = @import("clock.zig");
 pub const Clock = clock.Clock;
 pub const Ts = clock.Ts;
+
 const ids = @import("ids.zig");
 pub const V7 = ids.V7;
 pub const Uuid = ids.Uuid;
 pub const ReplicaId = ids.ReplicaId;
-pub const model = @import("model.zig");
+
+const model = @import("model.zig");
+pub const Meta = model.Meta;
+pub const Workspace = model.Workspace;
 
 pub const Diagnostic = struct {
     path_buf: [std.fs.max_path_bytes]u8 = undefined,
@@ -44,7 +48,7 @@ pub const Diagnostic = struct {
     }
 
     pub fn setDetail(self: *Diagnostic, d: []const u8) void {
-        const n = @min(d.len, self.path_buf.len);
+        const n = @min(d.len, self.detail_buf.len);
         @memcpy(self.detail_buf[0..n], d[0..n]);
         self.detail_len = n;
     }

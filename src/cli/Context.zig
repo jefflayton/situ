@@ -120,9 +120,12 @@ pub fn listProjects(self: *Context) Error!ArrayList(Project) {
         var s = try self.getStore(uuid);
         defer s.deinit();
 
+        var arena: std.heap.ArenaAllocator = .init(self.gpa);
+        defer arena.deinit();
         var ctx: logic.Context = .{
             .io = self.io,
             .gpa = self.gpa,
+            .arena = arena.allocator(),
             .project_id = uuid,
         };
         const meta = try logic.withTxn(&s, &ctx, .{}, logic.meta.read);

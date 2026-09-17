@@ -8,13 +8,9 @@ create table meta (
 
 create table workspaces (
     id blob primary key not null check (length(id) = 16),
-    name text not null,
-    project_id blob not null references meta (project_id) on delete cascade,
+    name text not null unique,
     created_ts integer not null,
-    updated_hlc text not null check (length(updated_hlc) = 21),
-
-    unique (id, project_id),
-    unique (project_id, name)
+    updated_hlc text not null check (length(updated_hlc) = 21)
 ) strict;
 
 -- create table notes (

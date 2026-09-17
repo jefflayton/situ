@@ -4,10 +4,12 @@ const core = @import("core");
 const store = @import("store");
 
 pub const meta = @import("meta.zig");
+pub const workspaces = @import("workspaces.zig");
 
 pub const Context = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
     project_id: ?core.Uuid = null,
     replica_id: ?core.ReplicaId = null,
     ids: ?*core.V7 = null,
@@ -27,7 +29,7 @@ pub fn withTxn(
 ))) {
     comptime store.assertStore(@TypeOf(s));
 
-    var txn = try s.begin(ctx.gpa, ctx.diag);
+    var txn = try s.begin(ctx.arena, ctx.diag);
     defer txn.deinit();
 
     const result = try f(&txn, ctx, args);

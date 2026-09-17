@@ -1,5 +1,6 @@
 const std = @import("std");
 const Arena = std.heap.ArenaAllocator;
+const ArrayList = std.array_list.Managed;
 
 const core = @import("core");
 const sqlite = @import("sqlite");
@@ -45,7 +46,7 @@ pub const Sqlite = struct {
             self.arena.deinit();
         }
 
-        pub fn getMeta(self: *Txn) store.Error!core.model.Meta {
+        pub fn getMeta(self: *Txn) store.Error!core.Meta {
             var stmt = self.store.db.prepare(
                 \\SELECT id, project_name, project_id, replica_id, last_hlc
                 \\FROM meta
@@ -60,7 +61,7 @@ pub const Sqlite = struct {
             return error.NotFound;
         }
 
-        pub fn insertMeta(self: *Txn, meta: core.model.Meta) store.Error!void {
+        pub fn insertMeta(self: *Txn, meta: core.Meta) store.Error!void {
             self.store.db.execAlloc(
                 self.arena.allocator(),
                 \\INSERT INTO meta (id, project_name, project_id, replica_id, last_hlc)
@@ -71,7 +72,7 @@ pub const Sqlite = struct {
             ) catch |err| return errors.capture(&self.store.db, err, "execute insertMeta", self.diag);
         }
 
-        pub fn updateMeta(self: *Txn, meta: core.model.Meta) store.Error!void {
+        pub fn updateMeta(self: *Txn, meta: core.Meta) store.Error!void {
             const m: row.MetaRow = .fromMeta(meta);
 
             self.store.db.execAlloc(
@@ -83,6 +84,37 @@ pub const Sqlite = struct {
                 .{},
                 .{ .last_hlc = m.last_hlc },
             ) catch |err| return errors.capture(&self.store.db, err, "execute updateMeta", self.diag);
+        }
+
+        pub fn listWorkspaces(self: *Txn) store.Error![]core.Workspace {
+            var stmt = self.store.db.prepare(
+                \\SELECT id, name, created_ts, updated_hlc
+                \\FROM workspaces
+            ) catch |err| return errors.capture(&self.store.db, err, "prepare getWorkspaces", self.diag);
+            defer stmt.deinit();
+
+            const rows = stmt.all(row.WorkspaceRow, self.arena.allocator(), .{}, .{}) catch |err| {
+                return errors.capture(&self.store.db, err, "execute getWorkspaces", self.diag);
+            };
+
+            var new_rows: ArrayList(core.Workspace) = .init(self.arena.allocator());
+            for (rows) |r| try new_rows.append(r.toWorkspace());
+            //     catch |err| {
+            //     if (self.diag) |d| d.set("", "append workspace to array_list", "append", err);
+            //     return error.OutOfMemory;
+            // };
+            return try new_rows.toOwnedSlice();
+        }
+
+        pub fn insertWorkspace(self: *Txn, w: core.Workspace) store.Error!void {
+            self.store.db.execAlloc(
+                self.arena.allocator(),
+                \\INSERT INTO workspaces(id, name, created_ts, updated_hlc)
+                \\VALUES (?, ?, ?, ?)
+            ,
+                .{},
+                row.WorkspaceRow.fromWorkspace(w),
+            ) catch |err| return errors.capture(&self.store.db, err, "insertWorkspace", self.diag);
         }
     };
 };

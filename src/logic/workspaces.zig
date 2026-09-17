@@ -1,0 +1,40 @@
+const std = @import("std");
+
+const core = @import("core");
+const store = @import("store");
+
+const logic = @import("root.zig");
+
+pub fn list(txn: anytype, ctx: *logic.Context, _: anytype) store.Error![]core.Workspace {
+    comptime store.assertTxn(@TypeOf(txn));
+
+    const rows = try txn.listWorkspaces();
+
+    const out = try ctx.arena.alloc(core.Workspace, rows.len);
+    for (rows, out) |r, *o| {
+        o.* = r;
+        o.name = try ctx.arena.dupe(u8, r.name);
+    }
+    return out;
+}
+
+pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!void {
+    comptime store.assertTxn(@TypeOf(txn));
+
+    const now = ctx.clock.?.now(ctx.io) catch |err| {
+        if (ctx.diag) |d| d.set("", "generate hlc", "logic.workspaces.create", err);
+        return error.Io;
+    };
+    const id = ctx.ids.?.generate(ctx.io) catch |err| {
+        if (ctx.diag) |d| d.set("", "generate id", "logic.workspaces.create", err);
+        return error.Io;
+    };
+
+    const w: core.Workspace = .{
+        .id = id,
+        .name = args.name,
+        .created_ts = now.wall,
+        .updated_hlc = now,
+    };
+    try txn.insertWorkspace(w);
+}

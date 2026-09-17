@@ -30,9 +30,10 @@ pub fn main(init: std.process.Init) u8 {
     const stdout = &stdout_writer.interface;
 
     var stderr_buf: [ERR_BUF_SIZE]u8 = undefined;
-    var stderr_file = std.Io.File.stdout();
+    var stderr_file = std.Io.File.stderr();
     var stderr_writer = stderr_file.writer(init.io, &stderr_buf);
     const stderr = &stderr_writer.interface;
+    defer stderr.flush() catch {};
 
     var ctx: Context = .{
         .io = init.io,
