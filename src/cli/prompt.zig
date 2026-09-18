@@ -64,4 +64,20 @@ pub fn text(ctx: *Context, arena: Allocator, label: []const u8) ![]const u8 {
         };
     };
 }
-// pub fn confirm(ctx: *Context, label: []const u8, default: bool) !bool
+
+pub fn confirm(ctx: *Context, label: []const u8) !bool {
+    return blk: while (true) {
+        try ctx.stdout.print("{s} (Y/N): ", .{label});
+        try ctx.stdout.flush();
+
+        const res = ctx.stdin.takeDelimiter('\n') catch |err| {
+            ctx.diag.set("stdin", "confirm", "takeDelimiter", err);
+            return error.Io;
+        };
+        if (res) |r| if (r.len == 1) switch (r[0]) {
+            'Y', 'y' => break :blk true,
+            'N', 'n' => break :blk false,
+            else => {},
+        };
+    };
+}

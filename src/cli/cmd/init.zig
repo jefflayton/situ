@@ -114,4 +114,9 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         wkspc_name = try prompt.text(ctx, arena.allocator(), "Workspace Name");
         try logic.withTxn(&s, &txn_ctx, .{ .name = wkspc_name }, logic.workspaces.create);
     }
+
+    // TODO: Setup .git/info/exclude and .gitignore writing
+    if (try prompt.confirm(ctx, "Write .gitignore?")) {
+        // TODO: Write .gitignore
+    }
 }
