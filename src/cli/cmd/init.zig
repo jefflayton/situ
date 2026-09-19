@@ -33,11 +33,22 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
-    var root = try paths.findWorkspaceRoot(io, gpa, .cwd(), &ctx.diag);
-    if (root) |*r| {
-        defer r.deinit(io, gpa);
-        return if (r.linked) error.LinkedCheckout else error.AlreadyInitialized;
+    const found_root = try paths.findWorkspaceRoot(io, gpa, .cwd(), &ctx.diag);
+
+    var root: paths.Found = undefined;
+    if (found_root) |f| {
+        root = f;
+    } else {
+        root = paths.Found{
+            .dir = try Io.Dir.openDir(.cwd(), io, ".", .{}),
+            .path = Io.Dir.realPathFileAlloc(.cwd(), io, ".", gpa) catch |err| {
+                ctx.diag.set("cwd", "", "realPath", err);
+                return error.Io;
+            },
+            .linked = false,
+        };
     }
+    defer root.deinit(io, gpa);
 
     var projects = try ctx.listProjects();
     defer projects.deinit();
@@ -115,8 +126,42 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         try logic.withTxn(&s, &txn_ctx, .{ .name = wkspc_name }, logic.workspaces.create);
     }
 
-    // TODO: Setup .git/info/exclude and .gitignore writing
+    const git_dir: ?Io.Dir = root.dir.openDir(io, ".git", .{}) catch |err| switch (err) {
+        error.FileNotFound => null, // TODO: record not found
+        else => |e| {
+            ctx.diag.set(".git", "", "dir.access", e);
+            return error.Io;
+        },
+    };
+    if (git_dir) |g| try appendExclude(ctx, g, "info/exclude", "/.situ/\n");
+
     if (try prompt.confirm(ctx, "Write .gitignore?")) {
-        // TODO: Write .gitignore
+        try appendExclude(ctx, root.dir, ".gitignore", "*.situ.*\n");
+    }
+}
+
+/// Appends a glob to the end of a git exlude file
+/// TODO: make more generic. Probably move to paths.zig
+fn appendExclude(ctx: *Context, dir: Io.Dir, path: []const u8, exclude: []const u8) cmd.CommandError!void {
+    const data = dir.readFileAlloc(ctx.io, path, ctx.gpa, .unlimited) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => |e| {
+            ctx.diag.set(path, "", "appendExclude.readFileAlloc", e);
+            return error.Io;
+        },
+    };
+    if (data) |d| {
+        defer ctx.gpa.free(d);
+        if (std.mem.indexOf(u8, d, exclude) == null) {
+            var new = try ctx.gpa.alloc(u8, d.len + exclude.len);
+            defer ctx.gpa.free(new);
+            @memcpy(new[0..d.len], d);
+            @memcpy(new[d.len..], exclude);
+
+            dir.writeFile(ctx.io, .{ .sub_path = path, .data = new }) catch |err| {
+                ctx.diag.set(path, "", "appendExclude.writeFile", err);
+                return error.Io;
+            };
+        }
     }
 }

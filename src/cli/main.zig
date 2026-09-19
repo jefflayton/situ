@@ -76,11 +76,12 @@ fn reportError(err: anyerror, d: *const core.Diagnostic) void {
         error.AlreadyInitialized => std.log.err("already a situ workspace", .{}),
         error.OutOfMemory => std.log.err("out of memory", .{}),
         else => {
-            std.log.err("{s} - {s}: {s}: {t}", .{
+            std.log.err("{s} - {s}: {s}: {t}\ncause: {t}", .{
                 d.path() orelse "",
                 d.detail() orelse "",
                 d.op orelse "?",
                 err,
+                d.cause orelse err,
             });
         },
     }
