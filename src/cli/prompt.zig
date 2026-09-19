@@ -6,6 +6,8 @@ const Context = @import("Context.zig");
 
 /// Input loop to choose an index from a list of items.
 pub fn choose(ctx: *Context, comptime T: type, items: []const T, label: []const u8) cmd.CommandError!?usize {
+    if (items.len == 0) return null;
+
     try ctx.stdout.print("\nSelect {s} index:\n", .{label});
     try ctx.stdout.print("0 - New {s}\n", .{label});
     for (items, 1..) |it, i| {
