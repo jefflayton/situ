@@ -1,35 +1,34 @@
 const std = @import("std");
+const Build = std.Build;
+const Step = std.Build.Step;
 
 const Artifact = struct {
-    exe: *std.Build.Step.Compile,
-    install: *std.Build.Step,
+    exe: *Step.Compile,
+    install: *Step,
 };
 
 const Modules = struct {
-    core: *std.Build.Module,
-    store: *std.Build.Module,
-    logic: *std.Build.Module,
-    cli: *std.Build.Module,
+    core: *Build.Module,
+    store: *Build.Module,
+    logic: *Build.Module,
+    cli: *Build.Module,
 };
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-    const check = b.step("check", "Compile-check all");
 
     const modules = buildModules(b, target, optimize);
 
     const cli = buildCli(b, modules);
-    check.dependOn(&cli.exe.step);
 
-    const tests = buildTests(b, modules);
-    check.dependOn(tests);
+    _ = buildCheck(b, modules);
+    _ = buildTests(b, modules);
 
     b.getInstallStep().dependOn(cli.install);
 }
 
-fn buildModules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) Modules {
+fn buildModules(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) Modules {
     const sqlite = b.dependency("sqlite", .{ .target = target, .optimize = optimize });
     const serde = b.dependency("serde", .{ .target = target, .optimize = optimize });
 
@@ -68,23 +67,53 @@ fn buildModules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     return .{ .core = core, .store = store, .logic = logic, .cli = cli };
 }
 
-fn buildTests(b: *std.Build, modules: Modules) *std.Build.Step {
-    const step = b.step("test", "Run all tests");
+fn buildTests(b: *Build, modules: Modules) *Step {
+    const run_step = b.step("test", "Run all tests");
 
-    for ([_]*std.Build.Module{ modules.core, modules.store, modules.logic, modules.cli }) |m| {
+    for ([_]*Build.Module{ modules.core, modules.store, modules.logic, modules.cli }) |m| {
         const t = b.addTest(.{ .root_module = m });
-        step.dependOn(&b.addRunArtifact(t).step);
+        run_step.dependOn(&b.addRunArtifact(t).step);
+    }
+
+    return run_step;
+}
+
+/// Semantic analysis only: `generated_bin = null` makes `Step.Compile` pass
+/// `-fno-emit-bin`, so the compiler stops before codegen and linking.
+///
+/// Both an object and a test per module, because neither alone covers the
+/// module. An object is rooted at the module, so it reaches `main` and other
+/// code no test references; a test binary is rooted at the test runner, so it
+/// reaches `test` blocks but never unreferenced normal code.
+fn buildCheck(b: *Build, modules: Modules) *Step {
+    const step = b.step("check", "Compilation check");
+
+    for ([_]struct { []const u8, *Build.Module }{
+        .{ "core", modules.core },
+        .{ "logic", modules.logic },
+        .{ "store", modules.store },
+        .{ "cli", modules.cli },
+    }) |entry| {
+        const name, const mod = entry;
+
+        const obj = b.addObject(.{ .name = name, .root_module = mod });
+        obj.generated_bin = null;
+        step.dependOn(&obj.step);
+
+        const t = b.addTest(.{ .name = name, .root_module = mod });
+        t.generated_bin = null;
+        step.dependOn(&t.step);
     }
 
     return step;
 }
 
-fn buildCli(b: *std.Build, modules: Modules) Artifact {
+fn buildCli(b: *Build, modules: Modules) Artifact {
     const step = b.step("cli", "Build the cli");
 
     const mod = modules.cli;
 
-    const exe_opts: std.Build.ExecutableOptions = .{
+    const exe_opts: Build.ExecutableOptions = .{
         .name = "situ",
         .root_module = mod,
     };
