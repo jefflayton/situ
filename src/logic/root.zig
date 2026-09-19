@@ -5,6 +5,7 @@ const store = @import("store");
 
 pub const meta = @import("meta.zig");
 pub const workspaces = @import("workspaces.zig");
+pub const checkouts = @import("checkouts.zig");
 
 pub const Context = struct {
     io: std.Io,

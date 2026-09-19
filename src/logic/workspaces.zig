@@ -21,6 +21,20 @@ pub fn list(txn: anytype, ctx: *logic.Context, _: anytype) store.Error![]core.Wo
 pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!void {
     comptime store.assertTxn(@TypeOf(txn));
 
+    const w = try buildWorkspace(ctx, args);
+    try txn.insertWorkspace(w);
+}
+
+pub fn createWithCheckout(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!void {
+    comptime store.assertTxn(@TypeOf(txn));
+
+    const w = try buildWorkspace(ctx, args);
+    try txn.insertWorkspace(w);
+
+    try logic.checkouts.create(txn, ctx, .{ .workspace_id = w.id, .path = args.path });
+}
+
+fn buildWorkspace(ctx: *logic.Context, args: anytype) store.Error!core.Workspace {
     const now = ctx.clock.?.now(ctx.io) catch |err| {
         if (ctx.diag) |d| d.set("", "generate hlc", "logic.workspaces.create", err);
         return error.Io;
@@ -30,11 +44,10 @@ pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!void
         return error.Io;
     };
 
-    const w: core.Workspace = .{
+    return .{
         .id = id,
         .name = args.name,
         .created_ts = now.wall,
         .updated_hlc = now,
     };
-    try txn.insertWorkspace(w);
 }

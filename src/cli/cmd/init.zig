@@ -123,7 +123,12 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
     } else {
         wkspc_id = try ids.generate(io);
         wkspc_name = try prompt.text(ctx, arena.allocator(), "Workspace Name");
-        try logic.withTxn(&s, &txn_ctx, .{ .name = wkspc_name }, logic.workspaces.create);
+        try logic.withTxn(
+            &s,
+            &txn_ctx,
+            .{ .name = wkspc_name, .path = root.path },
+            logic.workspaces.createWithCheckout,
+        );
     }
 
     const git_dir: ?Io.Dir = root.dir.openDir(io, ".git", .{}) catch |err| switch (err) {

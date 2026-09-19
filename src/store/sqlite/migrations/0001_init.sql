@@ -13,6 +13,12 @@ create table workspaces (
     updated_hlc text not null check (length(updated_hlc) = 21)
 ) strict;
 
+create table checkouts (
+    workspace_id blob references workspaces (id) not null,
+    path text not null,
+    primary key (workspace_id, path)
+) strict;
+
 -- create table notes (
 --     id blob primary key not null check (length(id) = 16),
 --     path text not null, -- file path, relative to workspace dir

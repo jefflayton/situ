@@ -99,10 +99,6 @@ pub const Sqlite = struct {
 
             var new_rows: ArrayList(core.Workspace) = .init(self.arena.allocator());
             for (rows) |r| try new_rows.append(r.toWorkspace());
-            //     catch |err| {
-            //     if (self.diag) |d| d.set("", "append workspace to array_list", "append", err);
-            //     return error.OutOfMemory;
-            // };
             return try new_rows.toOwnedSlice();
         }
 
@@ -115,6 +111,17 @@ pub const Sqlite = struct {
                 .{},
                 row.WorkspaceRow.fromWorkspace(w),
             ) catch |err| return errors.capture(&self.store.db, err, "insertWorkspace", self.diag);
+        }
+
+        pub fn insertCheckout(self: *Txn, c: core.Checkout) store.Error!void {
+            self.store.db.execAlloc(
+                self.arena.allocator(),
+                \\INSERT INTO checkouts(workspace_id, path)
+                \\VALUES (?, ?)
+            ,
+                .{},
+                row.CheckoutRow.fromCheckout(c),
+            ) catch |err| return errors.capture(&self.store.db, err, "insertCheckout", self.diag);
         }
     };
 };

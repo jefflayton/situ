@@ -117,6 +117,26 @@ pub const WorkspaceRow = struct {
     }
 };
 
+/// A variation of core.Checkout that uses sqlite compatible structs
+pub const CheckoutRow = struct {
+    workspace_id: UuidCol,
+    path: []const u8,
+
+    pub fn fromCheckout(c: core.Checkout) CheckoutRow {
+        return .{
+            .workspace_id = .{ .inner = c.workspace_id },
+            .path = c.path,
+        };
+    }
+
+    pub fn toCheckout(self: CheckoutRow) core.Checkout {
+        return .{
+            .workspace_id = self.workspace_id.inner,
+            .path = self.path,
+        };
+    }
+};
+
 test "UuidCol roundtrips through bind/read" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -161,4 +181,12 @@ test "WorkspaceRow roundtrips Workspace" {
         .updated_hlc = .{ .wall = 1_700_000_000_000, .counter = 7 },
     };
     try testing.expectEqual(m, WorkspaceRow.fromWorkspace(m).toWorkspace());
+}
+
+test "CheckoutRow roundtrips Checkout" {
+    const c: core.Checkout = .{
+        .workspace_id = .{ .bytes = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 } },
+        .path = "Test",
+    };
+    try testing.expectEqual(c, CheckoutRow.fromCheckout(c).toCheckout());
 }

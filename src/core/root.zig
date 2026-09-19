@@ -12,6 +12,7 @@ pub const ReplicaId = ids.ReplicaId;
 const model = @import("model.zig");
 pub const Meta = model.Meta;
 pub const Workspace = model.Workspace;
+pub const Checkout = model.Checkout;
 
 pub const Diagnostic = struct {
     path_buf: [std.fs.max_path_bytes]u8 = undefined,

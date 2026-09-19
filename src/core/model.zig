@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const core = @import("root.zig");
 const Uuid = core.Uuid;
 const ReplicaId = core.ReplicaId;
@@ -16,6 +18,11 @@ pub const Workspace = struct {
     name: []const u8,
     created_ts: u64,
     updated_hlc: Ts,
+};
+
+pub const Checkout = struct {
+    workspace_id: Uuid,
+    path: []const u8,
 };
 
 pub const Note = struct {
