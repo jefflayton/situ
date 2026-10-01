@@ -5,6 +5,12 @@ const store = @import("store");
 
 const logic = @import("root.zig");
 
+pub fn read(txn: anytype, _: *logic.Context, args: anytype) store.Error!core.Workspace {
+    comptime store.assertTxn(@TypeOf(txn));
+
+    return try txn.getWorkspace(args.id);
+}
+
 pub fn list(txn: anytype, ctx: *logic.Context, _: anytype) store.Error![]core.Workspace {
     comptime store.assertTxn(@TypeOf(txn));
 
@@ -25,13 +31,15 @@ pub fn create(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!void
     try txn.insertWorkspace(w);
 }
 
-pub fn createWithCheckout(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!void {
+pub fn createWithCheckout(txn: anytype, ctx: *logic.Context, args: anytype) store.Error!core.Workspace {
     comptime store.assertTxn(@TypeOf(txn));
 
     const w = try buildWorkspace(ctx, args);
     try txn.insertWorkspace(w);
 
     try logic.checkouts.create(txn, ctx, .{ .workspace_id = w.id, .path = args.path });
+
+    return w;
 }
 
 fn buildWorkspace(ctx: *logic.Context, args: anytype) store.Error!core.Workspace {

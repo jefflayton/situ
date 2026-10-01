@@ -10,6 +10,8 @@ const store = @import("store");
 
 const Config = @import("Config.zig");
 const paths = @import("paths.zig");
+const Session = @import("Session.zig");
+const WorkspaceConfig = @import("WorkspaceConfig.zig");
 
 io: Io,
 gpa: Allocator,
@@ -19,7 +21,7 @@ stdin: *Io.Reader,
 stdout: *Io.Writer,
 stderr: *Io.Writer,
 
-pub const Error = error{BadPath} ||
+pub const Error = error{ BadPath, StoreNotFound } ||
     store.Error ||
     paths.Error ||
     core.Uuid.ParseError ||
@@ -59,31 +61,39 @@ pub fn getConfig(self: *Context) !Config {
     return new_cfg;
 }
 
-/// Gets the store for the current project, creating one if it doesn't exist.
+/// Gets the store for the current project
 pub fn getStore(self: *Context, id: core.Uuid) !store.Sqlite {
     const path = try paths.projectDb(self.gpa, self.environ, id);
     defer self.gpa.free(path);
 
-    Io.Dir.accessAbsolute(self.io, path, .{}) catch |err| switch (err) {
-        error.FileNotFound => {
-            const dir_path = std.fs.path.dirname(path) orelse return error.BadPath;
-            const dir = Io.Dir.cwd().createDirPathOpen(self.io, dir_path, .{}) catch |e| {
-                self.diag.set(path, "", "open directory", e);
-                return e;
-            };
-            defer dir.close(self.io);
-
-            var atomic = dir.createFileAtomic(self.io, path, .{}) catch |e| {
-                self.diag.set(path, "", "create file", e);
-                return e;
-            };
-            defer atomic.deinit(self.io);
-            atomic.link(self.io) catch |e| {
-                self.diag.set(path, "", "link file", e);
-                return e;
-            };
-        },
+    Io.Dir.accessAbsolute(self.io, path, .{ .read = true }) catch |err| switch (err) {
+        error.FileNotFound => return error.NotFound,
         else => |e| return e,
+    };
+
+    return try store.Sqlite.init(path, &self.diag);
+}
+
+/// Creates a new store for the existing project;
+pub fn createStore(self: *Context, id: core.Uuid) !store.Sqlite {
+    const path = try paths.projectDb(self.gpa, self.environ, id);
+    defer self.gpa.free(path);
+
+    const dir_path = std.fs.path.dirname(path) orelse return error.BadPath;
+    const dir = Io.Dir.cwd().createDirPathOpen(self.io, dir_path, .{}) catch |e| {
+        self.diag.set(path, "", "open directory", e);
+        return e;
+    };
+    defer dir.close(self.io);
+
+    var atomic = dir.createFileAtomic(self.io, path, .{}) catch |e| {
+        self.diag.set(path, "", "create file", e);
+        return e;
+    };
+    defer atomic.deinit(self.io);
+    atomic.link(self.io) catch |e| {
+        self.diag.set(path, "", "link file", e);
+        return e;
     };
 
     return try store.Sqlite.init(path, &self.diag);
@@ -95,7 +105,7 @@ const Project = struct {
 };
 
 /// List all projects
-pub fn listProjects(self: *Context) Error!ArrayList(Project) {
+pub fn listProjects(self: *Context, arena: *std.heap.ArenaAllocator) Error!ArrayList(Project) {
     var found = try paths.projectsDir(self.io, self.gpa, self.environ);
     defer found.deinit(self.io, self.gpa);
 
@@ -105,7 +115,7 @@ pub fn listProjects(self: *Context) Error!ArrayList(Project) {
     };
     defer walker.deinit();
 
-    var project_ids: ArrayList(Project) = .init(self.gpa);
+    var projects: ArrayList(Project) = .init(self.gpa);
     while (walker.next(self.io) catch |err| {
         self.diag.set(found.path, "", "iterate dir", err);
         return err;
@@ -120,21 +130,22 @@ pub fn listProjects(self: *Context) Error!ArrayList(Project) {
         var s = try self.getStore(uuid);
         defer s.deinit();
 
-        var arena: std.heap.ArenaAllocator = .init(self.gpa);
-        defer arena.deinit();
         var ctx: logic.Context = .{
             .io = self.io,
             .gpa = self.gpa,
             .arena = arena.allocator(),
             .project_id = uuid,
         };
-        const meta = try logic.withTxn(&s, &ctx, .{}, logic.meta.read);
+        const meta = logic.withTxn(&s, &ctx, .{}, logic.meta.read) catch |err| switch (err) {
+            error.NotFound => continue,
+            else => |e| return e,
+        };
 
-        try project_ids.append(.{
+        try projects.append(.{
             .id = uuid,
-            .name = meta.project_name,
+            .name = try arena.allocator().dupe(u8, meta.project_name),
         });
     }
 
-    return project_ids;
+    return projects;
 }

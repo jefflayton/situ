@@ -86,15 +86,36 @@ pub const Sqlite = struct {
             ) catch |err| return errors.capture(&self.store.db, err, "execute updateMeta", self.diag);
         }
 
+        pub fn getWorkspace(self: *Txn, id: core.Uuid) store.Error!core.Workspace {
+            var stmt = self.store.db.prepare(
+                \\SELECT id, name, created_ts, updated_hlc
+                \\FROM workspaces
+                \\WHERE id = ?
+                ,
+            ) catch |err| return errors.capture(&self.store.db, err, "prepare getWorkspace", self.diag);
+            defer stmt.deinit();
+
+            const found = stmt.oneAlloc(
+                row.WorkspaceRow,
+                self.arena.allocator(),
+                .{},
+                .{ .id = row.UuidCol.fromUuid(id) },
+            ) catch |err| {
+                return errors.capture(&self.store.db, err, "execute getWorkspace", self.diag);
+            };
+            if (found) |f| return row.WorkspaceRow.toWorkspace(f);
+            return error.NotFound;
+        }
+
         pub fn listWorkspaces(self: *Txn) store.Error![]core.Workspace {
             var stmt = self.store.db.prepare(
                 \\SELECT id, name, created_ts, updated_hlc
                 \\FROM workspaces
-            ) catch |err| return errors.capture(&self.store.db, err, "prepare getWorkspaces", self.diag);
+            ) catch |err| return errors.capture(&self.store.db, err, "prepare listWorkspaces", self.diag);
             defer stmt.deinit();
 
             const rows = stmt.all(row.WorkspaceRow, self.arena.allocator(), .{}, .{}) catch |err| {
-                return errors.capture(&self.store.db, err, "execute getWorkspaces", self.diag);
+                return errors.capture(&self.store.db, err, "execute listWorkspaces", self.diag);
             };
 
             var new_rows: ArrayList(core.Workspace) = .init(self.arena.allocator());

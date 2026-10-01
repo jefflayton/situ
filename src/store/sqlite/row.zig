@@ -24,6 +24,14 @@ pub const UuidCol = struct {
         @memcpy(&u.bytes, value.data);
         return .{ .inner = u };
     }
+
+    pub fn fromUuid(u: core.Uuid) UuidCol {
+        return .{ .inner = u };
+    }
+
+    pub fn toUuid(self: UuidCol) core.Uuid {
+        return self.inner;
+    }
 };
 
 /// Wraps core.ids.ReplicaId to provide binding functions for sqlite
