@@ -1,0 +1,61 @@
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --draft --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: jdx/mise-action@v3.0.0
+
+      - name: Cache zig packages
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/zig
+          key: zig-${{ runner.os }}-${{ hashFiles('build.zig.zon') }}
+          restore-keys: zig-${{ runner.os }}-
+
+      - run: mkdir -p ~/.cache/zig/tmp
+
+      - run: zig build -Dtarget=aarch64-macos -Doptimize=ReleaseFast
+
+      - run: |
+          mkdir -p dist/situ-macos-aarch64
+          cp zig-out/bin/situ dist/situ-macos-aarch64/
+          tar czf situ-macos-aarch64.tar.gz -C dist situ-macos-aarch64
+
+      - run: gh release upload "$GITHUB_REF_NAME" situ-macos-aarch64.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  cleanup:
+    needs: [release, build, publish]
+    if: failure() && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
