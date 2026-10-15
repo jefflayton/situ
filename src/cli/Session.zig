@@ -32,13 +32,15 @@ pub const OpenError = error{ ConfigNotInitialized, StoreNotInitialized } ||
 
 pub fn open(ctx: *Context, root: paths.Found) OpenError!Session {
     var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| blk: {
-        ctx.diag.set(root.path, "", "WorkspaceConfig.read", err);
+        ctx.diag.fail(err, .{ .op = "Session.open.WorkspaceConfig.read", .context = root.path }) catch {};
         break :blk null;
     } orelse return error.ConfigNotInitialized;
     errdefer cfg.deinit();
 
     var s = ctx.getStore(cfg.data.project_id) catch |err| blk: {
-        ctx.diag.set("", "", "WorkspaceConfig.read", err);
+        ctx.diag.fail(err, .{
+            .op = "Session.open.getStore",
+        }) catch {};
         break :blk null;
     } orelse return error.StoreNotInitialized;
     errdefer s.deinit();
@@ -83,7 +85,7 @@ pub fn create(ctx: *Context, root: paths.Found, project_id: core.Uuid, project_n
     errdefer arena.deinit();
 
     var s = ctx.createStore(project_id) catch |err| {
-        ctx.diag.set("", "", "Sqlite.create", err);
+        ctx.diag.fail(err, .{ .op = "Session.create.createStore" }) catch {};
         return error.StoreNotInitialized;
     };
     errdefer {
@@ -132,7 +134,7 @@ pub fn attach(ctx: *Context, root: paths.Found, project_id: core.Uuid) OpenError
     errdefer arena.deinit();
 
     var s = ctx.getStore(project_id) catch |err| {
-        ctx.diag.set("", "", "Sqlite.open", err);
+        ctx.diag.fail(err, .{ .op = "Session.attach.getStore" }) catch {};
         return error.StoreNotInitialized;
     };
     errdefer s.deinit();

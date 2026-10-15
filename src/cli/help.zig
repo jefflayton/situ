@@ -5,21 +5,21 @@ const Allocator = std.mem.Allocator;
 const Context = @import("Context.zig");
 const cmd = @import("cmd/root.zig");
 
-pub fn print(ctx: *Context, command: ?cmd.Command) !void {
+/// Prints the help text for the `command` if given one. Otherwise, printst he help text for the program.
+pub fn print(ctx: *Context, command: ?cmd.Command) (Writer.Error || Allocator.Error)!void {
     if (command) |c| {
         commandHelp(ctx.gpa, ctx.stdout, c) catch |err| {
-            ctx.diag.set("stdout", "", "commandHelp", err);
-            return err;
+            return ctx.diag.fail(err, .{ .op = "print.commandHelp", .context = "stdout" });
         };
     } else {
         rootHelp(ctx.gpa, ctx.stdout) catch |err| {
-            ctx.diag.set("stdout", "", "rootHelp", err);
-            return err;
+            return ctx.diag.fail(err, .{ .op = "print.rootHelp", .context = "stdout" });
         };
     }
 }
 
-fn rootHelp(gpa: Allocator, w: *Writer) !void {
+/// Prints the help text for the program
+fn rootHelp(gpa: Allocator, w: *Writer) (Writer.Error || Allocator.Error)!void {
     const cmds = try listCommands(gpa);
     defer gpa.free(cmds);
 
@@ -47,7 +47,8 @@ fn rootHelp(gpa: Allocator, w: *Writer) !void {
     try w.flush();
 }
 
-fn commandHelp(gpa: Allocator, w: *Writer, c: cmd.Command) !void {
+/// Prints the help text for a command
+fn commandHelp(gpa: Allocator, w: *Writer, c: cmd.Command) (Writer.Error || Allocator.Error)!void {
     switch (c) {
         inline else => |tag| {
             const mod = @field(cmd.mods, @tagName(tag));
@@ -73,7 +74,8 @@ fn commandHelp(gpa: Allocator, w: *Writer, c: cmd.Command) !void {
     try w.flush();
 }
 
-fn listCommands(gpa: Allocator) ![]u8 {
+/// Lists the subcommands for the given type (command or root)
+fn listCommands(gpa: Allocator) Allocator.Error![]u8 {
     const fields = @typeInfo(@TypeOf(cmd.mods)).@"struct".fields;
     var commands: [fields.len][]u8 = undefined;
     inline for (fields, 0..) |f, i| {
@@ -89,8 +91,9 @@ fn listCommands(gpa: Allocator) ![]u8 {
     return try std.mem.join(gpa, "\n", &commands);
 }
 
-fn listFlags(comptime T: type, gpa: Allocator) ![]u8 {
-    cmd.assertOpts(T);
+/// Lists the flags for a given type (command or root)
+fn listFlags(comptime T: type, gpa: Allocator) Allocator.Error![]u8 {
+    comptime cmd.assertOpts(T);
 
     const fields = @typeInfo(T).@"struct".fields;
     var flags: [fields.len][]u8 = undefined;
@@ -113,21 +116,20 @@ fn listFlags(comptime T: type, gpa: Allocator) ![]u8 {
     return try std.mem.join(gpa, "\n", &flags);
 }
 
-pub fn usage(ctx: *Context, command: ?cmd.Command) !void {
+pub fn usage(ctx: *Context, command: ?cmd.Command) Writer.Error!void {
     if (command) |c| {
         commandUsage(ctx.stderr, c) catch |err| {
-            ctx.diag.set("stderr", "", "commandUsage", err);
-            return err;
+            return ctx.diag.fail(err, .{ .op = "usage.commandUsage", .context = "stderr" });
         };
     } else {
         rootUsage(ctx.stderr) catch |err| {
-            ctx.diag.set("stderr", "", "rootUsage", err);
-            return err;
+            return ctx.diag.fail(err, .{ .op = "usage.rootUsage", .context = "stderr" });
         };
     }
 }
 
-fn commandUsage(w: *Writer, c: cmd.Command) !void {
+/// Prints the usage for a given command
+fn commandUsage(w: *Writer, c: cmd.Command) Writer.Error!void {
     switch (c) {
         inline else => |tag| {
             const mod = @field(cmd.mods, @tagName(tag));
@@ -140,7 +142,8 @@ fn commandUsage(w: *Writer, c: cmd.Command) !void {
     try w.flush();
 }
 
-fn rootUsage(w: *Writer) !void {
+/// Prints the usage of the program
+fn rootUsage(w: *Writer) Writer.Error!void {
     try w.print("Usage: situ {s}\n", .{cmd.Root.usage});
     try w.flush();
 }

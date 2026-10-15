@@ -40,6 +40,7 @@ pub fn main(init: std.process.Init) u8 {
     var ctx: Context = .{
         .io = init.io,
         .gpa = init.gpa,
+        .diag = .{},
         .environ = init.environ_map,
         .stdin = stdin,
         .stdout = stdout,
@@ -73,20 +74,13 @@ pub fn main(init: std.process.Init) u8 {
     return 0;
 }
 
-fn reportError(err: anyerror, d: *const core.Diagnostic) void {
+fn reportError(err: anyerror, d: *core.Diagnostic) void {
     switch (err) {
         error.AlreadyInitialized => log.err("already a situ workspace", .{}),
         error.OutOfMemory => log.err("out of memory", .{}),
-        else => {
-            log.err("{s} - {s}: {s}: {t}\ncause: {t}", .{
-                d.path() orelse "",
-                d.detail() orelse "",
-                d.op orelse "?",
-                err,
-                d.cause orelse err,
-            });
-        },
+        else => {},
     }
+    log.err("{f}", .{d});
 
     if (@import("builtin").mode == .Debug) {
         if (@errorReturnTrace()) |t| log.err("{any}", .{t});

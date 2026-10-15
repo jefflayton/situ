@@ -21,7 +21,7 @@ pub fn choose(ctx: *Context, comptime T: type, items: []const T, label: []const 
         try ctx.stdout.flush();
 
         const res = ctx.stdin.takeDelimiter('\n') catch |err| {
-            ctx.diag.set("stdin", "choose", "takeDelimiter", err);
+            ctx.diag.fail(err, .{ .op = "prompt.choose.takeDelimiter", .context = "stdin" }) catch {};
             return error.Io;
         };
         if (res) |r| {
@@ -34,7 +34,7 @@ pub fn choose(ctx: *Context, comptime T: type, items: []const T, label: []const 
                     continue :outer;
                 },
                 else => |e| {
-                    ctx.diag.set("stdin", "choose", "fmt.parseInt", e);
+                    ctx.diag.fail(e, .{ .op = "prompt.choose.fmt.parseInt", .context = "stdin" }) catch {};
                     return error.Io;
                 },
             };
@@ -57,7 +57,7 @@ pub fn text(ctx: *Context, arena: Allocator, label: []const u8) ![]const u8 {
         try ctx.stdout.flush();
 
         const res = ctx.stdin.takeDelimiter('\n') catch |err| {
-            ctx.diag.set("stdin", "text", "takeDelimiter", err);
+            ctx.diag.fail(err, .{ .op = "prompt.text.takeDelimiter", .context = "stdin" }) catch {};
             return error.Io;
         };
         if (res) |r| if (r.len > 0) {
@@ -73,7 +73,7 @@ pub fn confirm(ctx: *Context, label: []const u8) !bool {
         try ctx.stdout.flush();
 
         const res = ctx.stdin.takeDelimiter('\n') catch |err| {
-            ctx.diag.set("stdin", "confirm", "takeDelimiter", err);
+            ctx.diag.fail(err, .{ .op = "prompt.confirm.takeDelimiter", .context = "stdin" }) catch {};
             return error.Io;
         };
         if (res) |r| if (r.len == 1) switch (r[0]) {

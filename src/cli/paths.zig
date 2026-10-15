@@ -110,7 +110,7 @@ pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: ?*core.Dia
             return .{
                 .dir = dir,
                 .path = dir.realPathFileAlloc(io, ".", gpa) catch |err| {
-                    if (diag) |d| d.set(".", "", "get filepath", err);
+                    if (diag) |d| d.fail(err, .{ .op = "findWorkspaceRoot.realPathFileAlloc" }) catch {};
                     return error.BadPath;
                 },
                 .linked = st.kind == .sym_link,
@@ -118,7 +118,7 @@ pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: ?*core.Dia
         } else |err| switch (err) {
             error.FileNotFound => {},
             else => |e| {
-                if (diag) |d| d.set("situ.toml", "", "stat file", e);
+                if (diag) |d| d.fail(e, .{ .op = "findWorkspaceRoot.statFile", .context = "situ.toml" }) catch {};
                 return error.BadPath;
             },
         }

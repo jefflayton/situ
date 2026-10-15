@@ -52,7 +52,7 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         root = paths.Found{
             .dir = try Io.Dir.openDir(.cwd(), io, ".", .{}),
             .path = Io.Dir.realPathFileAlloc(.cwd(), io, ".", gpa) catch |err| {
-                ctx.diag.set("cwd", "", "realPath", err);
+                ctx.diag.fail(err, .{ .op = "init.realPathFileAlloc", .context = "cwd" }) catch {};
                 return error.Io;
             },
             .linked = false,
@@ -63,7 +63,7 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
     var project_id: core.Uuid = undefined;
 
     const p = probe(ctx, root) catch |err| {
-        ctx.diag.set("", "init", "probe", err);
+        ctx.diag.fail(err, .{ .op = "init.probe" }) catch {};
         return error.Io;
     };
     switch (p) {
@@ -92,14 +92,14 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         project_id = projects.items[i].id;
         project_name = projects.items[i].name;
         session = Session.attach(ctx, root, project_id) catch |err| {
-            ctx.diag.set("", "", "init: Session.attach", err);
+            ctx.diag.fail(err, .{ .op = "init.Session.attach" }) catch {};
             return error.Io;
         };
     } else {
         var ids: core.V7 = .{};
         project_id = try ids.generate(ctx.io);
         session = Session.create(ctx, root, project_id, project_name) catch |err| {
-            ctx.diag.set("", "", "init: Session.create", err);
+            ctx.diag.fail(err, .{ .op = "init.Session.create" }) catch {};
             return error.Io;
         };
         project_name = try prompt.text(ctx, arena.allocator(), "Project Name");
@@ -145,14 +145,14 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
     session.cfg.?.write(io) catch |err| {
         var path: [std.fs.max_path_bytes]u8 = undefined;
         _ = session.cfg.?.dir.realPath(io, &path) catch {};
-        ctx.diag.set(&path, "", "WorkspaceConfig.write", err);
+        ctx.diag.fail(err, .{ .op = "init.run.WorkspaceConfig.write", .context = &path }) catch {};
         return error.Io;
     };
 
     const git_dir: ?Io.Dir = root.dir.openDir(io, ".git", .{}) catch |err| switch (err) {
         error.FileNotFound => null, // TODO: record not found
         else => |e| {
-            ctx.diag.set(".git", "", "dir.access", e);
+            ctx.diag.fail(e, .{ .op = "init.run.root.openDir", .context = ".git" }) catch {};
             return error.Io;
         },
     };
@@ -206,7 +206,7 @@ fn appendExclude(ctx: *Context, dir: Io.Dir, path: []const u8, exclude: []const 
     const data = dir.readFileAlloc(ctx.io, path, ctx.gpa, .unlimited) catch |err| switch (err) {
         error.FileNotFound => null,
         else => |e| {
-            ctx.diag.set(path, "", "appendExclude.readFileAlloc", e);
+            ctx.diag.fail(e, .{ .op = "init.appendExclude.readFileAlloc", .context = path }) catch {};
             return error.Io;
         },
     };
@@ -219,7 +219,7 @@ fn appendExclude(ctx: *Context, dir: Io.Dir, path: []const u8, exclude: []const 
             @memcpy(new[d.len..], exclude);
 
             dir.writeFile(ctx.io, .{ .sub_path = path, .data = new }) catch |err| {
-                ctx.diag.set(path, "", "appendExclude.writeFile", err);
+                ctx.diag.fail(err, .{ .op = "init.appendExclude.writeFile", .context = path }) catch {};
                 return error.Io;
             };
         }

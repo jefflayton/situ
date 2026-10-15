@@ -221,12 +221,11 @@ fn execScript(db: *sqlite.Db, sql: [:0]const u8, diag: ?*core.Diagnostic) store.
     if (rc == sqlite.c.SQLITE_OK) return;
 
     defer if (err_msg != null) sqlite.c.sqlite3_free(err_msg);
+    const err = errors.classifyCode(rc);
     if (diag) |d| {
-        d.op = "execute migration";
-        if (err_msg != null) d.setDetail(std.mem.span(err_msg));
-        d.cause = null;
+        d.fail(err, .{ .op = "execute migration", .context = std.mem.span(err_msg) }) catch {};
     }
-    return errors.classifyCode(rc);
+    return err;
 }
 
 test {
