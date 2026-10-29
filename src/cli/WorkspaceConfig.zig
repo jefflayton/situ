@@ -26,12 +26,13 @@ pub fn deinit(self: *WorkspaceConfig) void {
     self.arena.deinit();
 }
 
-pub const OpenError = error{NotFound} ||
+pub const ReadError = error{ NotFound, InvalidConfig, Malformed } ||
     Io.File.OpenError ||
+    Io.Reader.LimitedAllocError ||
     Allocator.Error;
 
 /// Reads the situ.toml located at `dir` into `data`
-pub fn read(io: Io, gpa: Allocator, dir: Io.Dir) !WorkspaceConfig {
+pub fn read(io: Io, gpa: Allocator, dir: Io.Dir, diag: *core.Diagnostic) ReadError!WorkspaceConfig {
     const f: Io.File = dir.openFile(io, "situ.toml", .{}) catch |err| switch (err) {
         error.FileNotFound => return error.NotFound,
         else => |e| return e,
@@ -43,7 +44,15 @@ pub fn read(io: Io, gpa: Allocator, dir: Io.Dir) !WorkspaceConfig {
 
     var buf: [BUF_SIZE]u8 = undefined;
     var r = f.reader(io, &buf);
-    const data = try toml.fromReader(Data, arena.allocator(), &r.interface);
+
+    const slice = try r.interface.allocRemaining(arena.allocator(), .unlimited);
+    const data = toml.fromSlice(Data, arena.allocator(), slice) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => |e| {
+            diag.fail(e, .{ .op = "WorkspaceConfig.read.fromSlice", .context = "situ.toml" });
+            return error.Malformed;
+        },
+    };
 
     return .{ .arena = arena, .dir = dir, .data = data };
 }
@@ -82,7 +91,8 @@ test {
     defer cfg.deinit();
     try cfg.write(io);
 
-    var got = try WorkspaceConfig.read(io, gpa, tmp.dir);
+    var diag: core.Diagnostic = .{};
+    var got = try WorkspaceConfig.read(io, gpa, tmp.dir, &diag);
     defer got.deinit();
 
     try std.testing.expectEqualSlices(u8, &p.bytes, &got.data.project_id.bytes);

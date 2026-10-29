@@ -28,21 +28,27 @@ const Session = @This();
 pub const OpenError = error{ ConfigNotInitialized, StoreNotInitialized } ||
     std.Io.Cancelable ||
     Allocator.Error ||
-    StoreError;
+    StoreError ||
+    WorkspaceConfig.ReadError ||
+    Context.GetStoreError;
 
 pub fn open(ctx: *Context, root: paths.Found) OpenError!Session {
-    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| blk: {
-        ctx.diag.fail(err, .{ .op = "Session.open.WorkspaceConfig.read", .context = root.path });
-        break :blk null;
-    } orelse return error.ConfigNotInitialized;
+    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| {
+        const e = switch (err) {
+            error.NotFound => error.ConfigNotInitialized,
+            else => |e| e,
+        };
+        return ctx.diag.failAs(e, .{ .op = "Session.open.WorkspaceConfig.read", .context = root.path });
+    };
     errdefer cfg.deinit();
 
-    var s = ctx.getStore(cfg.data.project_id) catch |err| blk: {
-        ctx.diag.fail(err, .{
-            .op = "Session.open.getStore",
-        }) catch {};
-        break :blk null;
-    } orelse return error.StoreNotInitialized;
+    var s = ctx.getStore(cfg.data.project_id) catch |err| {
+        const e = switch (err) {
+            error.NotFound => error.StoreNotInitialized,
+            else => |e| e,
+        };
+        return ctx.diag.failAs(e, .{ .op = "Session.open.getStore" });
+    };
     errdefer s.deinit();
 
     var arena: Arena = .init(ctx.gpa);

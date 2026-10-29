@@ -59,8 +59,10 @@ pub fn getConfig(self: *Context) !Config {
     return new_cfg;
 }
 
+pub const GetStoreError = paths.Error || store.Error || Io.Dir.AccessError;
+
 /// Gets the store for the current project
-pub fn getStore(self: *Context, id: core.Uuid) !store.Sqlite {
+pub fn getStore(self: *Context, id: core.Uuid) GetStoreError!store.Sqlite {
     const path = try paths.projectDb(self.gpa, self.environ, id);
     defer self.gpa.free(path);
 

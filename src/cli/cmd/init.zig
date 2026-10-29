@@ -163,7 +163,7 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
 }
 
 fn probe(ctx: *Context, root: paths.Found) !State {
-    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| switch (err) {
+    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir, &ctx.diag) catch |err| switch (err) {
         error.NotFound => null,
         else => |e| return e,
     };

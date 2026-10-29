@@ -12,7 +12,7 @@ const row = @import("row.zig");
 pub const Sqlite = struct {
     db: sqlite.Db,
 
-    pub fn init(path: [:0]const u8, diag: *core.Diagnostic) !Sqlite {
+    pub fn init(path: [:0]const u8, diag: *core.Diagnostic) store.Error!Sqlite {
         var db = try open(path, diag);
         errdefer db.deinit();
 
