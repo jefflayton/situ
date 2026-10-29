@@ -71,10 +71,12 @@ pub fn open(ctx: *Context, root: paths.Found) OpenError!Session {
     };
 }
 
-pub fn close(self: *Session) !void {
+pub fn flush(self: *Session) @import("store").Error!void {
     var ctx = self.logicCtx();
     try logic.withTxn(&self.store, &ctx, .{}, logic.meta.flush);
+}
 
+pub fn close(self: *Session) void {
     self.arena.deinit();
     if (self.cfg) |*c| c.deinit();
     self.store.deinit();

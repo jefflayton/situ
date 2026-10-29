@@ -104,9 +104,8 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         };
         project_name = try prompt.text(ctx, arena.allocator(), "Project Name");
     }
-    defer session.close() catch |err| {
-        std.log.warn("Failed to close session: {t}", .{err});
-    };
+    try session.flush();
+    defer session.close();
 
     var lc = session.logicCtx();
     const workspaces = try logic.withTxn(&session.store, &lc, .{}, logic.workspaces.list);
