@@ -28,7 +28,7 @@ pub fn classify(err: anyerror) Error {
 
 pub fn capture(db: *sqlite.Db, err: anyerror, op: []const u8, diag: ?*core.Diagnostic) Error {
     if (diag) |d| {
-        d.fail(err, .{ .op = op, .context = std.mem.span(sqlite.c.sqlite3_errmsg(db.db)) }) catch {};
+        d.fail(err, .{ .op = op, .context = std.mem.span(sqlite.c.sqlite3_errmsg(db.db)) });
     }
     return classify(err);
 }

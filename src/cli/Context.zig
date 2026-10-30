@@ -42,11 +42,11 @@ pub fn getConfig(self: *Context) !Config {
     Io.Dir.createDirAbsolute(self.io, dir_path, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => |e| {
-            return self.diag.fail(e, .{ .op = "getConfig.createDirAbsolute", .context = dir_path });
+            return self.diag.failAs(e, .{ .op = "getConfig.createDirAbsolute", .context = dir_path });
         },
     };
     const dir = Io.Dir.openDirAbsolute(self.io, dir_path, .{}) catch |err| {
-        return self.diag.fail(err, .{ .op = "getConfig.openDirAbsolute", .context = dir_path });
+        return self.diag.failAs(err, .{ .op = "getConfig.openDirAbsolute", .context = dir_path });
     };
     defer dir.close(self.io);
 
@@ -79,16 +79,16 @@ pub fn createStore(self: *Context, id: core.Uuid) !store.Sqlite {
 
     const dir_path = std.fs.path.dirname(path) orelse return error.BadPath;
     const dir = Io.Dir.cwd().createDirPathOpen(self.io, dir_path, .{}) catch |e| {
-        return self.diag.fail(e, .{ .op = "createStore.createDirPathOpen", .context = path });
+        return self.diag.failAs(e, .{ .op = "createStore.createDirPathOpen", .context = path });
     };
     defer dir.close(self.io);
 
     var atomic = dir.createFileAtomic(self.io, path, .{}) catch |e| {
-        return self.diag.fail(e, .{ .op = "createStore.createFileAtomic", .context = path });
+        return self.diag.failAs(e, .{ .op = "createStore.createFileAtomic", .context = path });
     };
     defer atomic.deinit(self.io);
     atomic.link(self.io) catch |e| {
-        return self.diag.fail(e, .{ .op = "createStore.atomic.link", .context = path });
+        return self.diag.failAs(e, .{ .op = "createStore.atomic.link", .context = path });
     };
 
     return try store.Sqlite.init(path, &self.diag);
@@ -105,18 +105,18 @@ pub fn listProjects(self: *Context, arena: *std.heap.ArenaAllocator) Error!Array
     defer found.deinit(self.io, self.gpa);
 
     var walker = found.dir.walkSelectively(self.gpa) catch |err| {
-        return self.diag.fail(err, .{ .op = "listProjects.walkSelectively", .context = found.path });
+        return self.diag.failAs(err, .{ .op = "listProjects.walkSelectively", .context = found.path });
     };
     defer walker.deinit();
 
     var projects: ArrayList(Project) = .init(self.gpa);
     while (walker.next(self.io) catch |err| {
-        return self.diag.fail(err, .{ .op = "listProjects.walker.next", .context = found.path });
+        return self.diag.failAs(err, .{ .op = "listProjects.walker.next", .context = found.path });
     }) |entry| {
         if (entry.kind != .directory) continue;
 
         const uuid = core.Uuid.parse(entry.basename) catch |err| {
-            return self.diag.fail(err, .{ .op = "listProjects.Uuid.parse", .context = entry.basename });
+            return self.diag.failAs(err, .{ .op = "listProjects.Uuid.parse", .context = entry.basename });
         };
 
         var s = try self.getStore(uuid);

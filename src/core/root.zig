@@ -33,12 +33,12 @@ pub const Diagnostic = struct {
     stack: [STACK_LEN]?Info = .{null} ** STACK_LEN,
     idx: usize = 0,
 
-    /// Add a new entry to the diagnistic stack. Return with the provided error.
+    /// Add a new entry to the diagnistic stack
     pub fn fail(
         self: *Diagnostic,
         err: anytype,
         info: struct { op: ?[]const u8 = null, context: ?[]const u8 = null },
-    ) @TypeOf(err) {
+    ) void {
         if (self.idx == STACK_LEN) self.dropOldestFromStack();
 
         self.stack[self.idx] = .{
@@ -47,7 +47,15 @@ pub const Diagnostic = struct {
         };
         if (info.context) |c| self.stack[self.idx].?.setContext(c);
         self.idx += 1;
+    }
 
+    /// Calls `fail()`, then returns `err`.
+    pub fn failAs(
+        self: *Diagnostic,
+        err: anytype,
+        info: struct { op: ?[]const u8 = null, context: ?[]const u8 = null },
+    ) @TypeOf(err) {
+        self.fail(err, info);
         return err;
     }
 
@@ -89,7 +97,7 @@ test {
 }
 
 fn failsWithMyErr(d: *Diagnostic) error{MyErr}!u32 {
-    return d.fail(error.MyErr, .{ .op = "myFunc" });
+    return d.failAs(error.MyErr, .{ .op = "myFunc" });
 }
 
 fn expectFormat(d: *Diagnostic, expected: []const u8) !void {
@@ -129,7 +137,7 @@ test "Diagnostic - STACK_LEN + {diff} errors" {
     for (1..STACK_LEN + diff + 1) |i| {
         var buf: [2]u8 = undefined;
         const b = try std.fmt.bufPrint(&buf, "{d}", .{i});
-        d.fail(error.MyErr, .{ .op = "myFunc", .context = b }) catch {};
+        d.fail(error.MyErr, .{ .op = "myFunc", .context = b });
     }
 
     try expectFormat(
@@ -162,7 +170,7 @@ test "Diagnostic - STACK_LEN + {diff} errors" {
 test "Diagnostic - null op" {
     var d: Diagnostic = .{};
 
-    d.fail(error.MyErr, .{}) catch {};
+    d.fail(error.MyErr, .{});
 
     try expectFormat(&d, "error: MyErr\n");
 }
@@ -170,7 +178,7 @@ test "Diagnostic - null op" {
 test "Diagnostic - Writer Error" {
     var d: Diagnostic = .{};
 
-    d.fail(error.MyErr, .{ .op = "myFunc", .context = "doing stuff" }) catch {};
+    d.fail(error.MyErr, .{ .op = "myFunc", .context = "doing stuff" });
 
     var buf: [4]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);

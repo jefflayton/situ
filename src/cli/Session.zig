@@ -32,7 +32,7 @@ pub const OpenError = error{ ConfigNotInitialized, StoreNotInitialized } ||
 
 pub fn open(ctx: *Context, root: paths.Found) OpenError!Session {
     var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| blk: {
-        ctx.diag.fail(err, .{ .op = "Session.open.WorkspaceConfig.read", .context = root.path }) catch {};
+        ctx.diag.fail(err, .{ .op = "Session.open.WorkspaceConfig.read", .context = root.path });
         break :blk null;
     } orelse return error.ConfigNotInitialized;
     errdefer cfg.deinit();
@@ -87,7 +87,7 @@ pub fn create(ctx: *Context, root: paths.Found, project_id: core.Uuid, project_n
     errdefer arena.deinit();
 
     var s = ctx.createStore(project_id) catch |err| {
-        ctx.diag.fail(err, .{ .op = "Session.create.createStore" }) catch {};
+        ctx.diag.fail(err, .{ .op = "Session.create.createStore" });
         return error.StoreNotInitialized;
     };
     errdefer {
@@ -136,7 +136,7 @@ pub fn attach(ctx: *Context, root: paths.Found, project_id: core.Uuid) OpenError
     errdefer arena.deinit();
 
     var s = ctx.getStore(project_id) catch |err| {
-        ctx.diag.fail(err, .{ .op = "Session.attach.getStore" }) catch {};
+        ctx.diag.fail(err, .{ .op = "Session.attach.getStore" });
         return error.StoreNotInitialized;
     };
     errdefer s.deinit();

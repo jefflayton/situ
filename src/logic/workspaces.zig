@@ -44,11 +44,11 @@ pub fn createWithCheckout(txn: anytype, ctx: *logic.Context, args: anytype) stor
 
 fn buildWorkspace(ctx: *logic.Context, args: anytype) store.Error!core.Workspace {
     const now = ctx.clock.?.now(ctx.io) catch |err| {
-        if (ctx.diag) |d| d.fail(err, .{ .op = "logic.workspaces.create", .context = "clock.generate" }) catch {};
+        if (ctx.diag) |d| d.fail(err, .{ .op = "logic.workspaces.create", .context = "clock.generate" });
         return error.Io;
     };
     const id = ctx.ids.?.generate(ctx.io) catch |err| {
-        if (ctx.diag) |d| d.fail(err, .{ .op = "logic.workspaces.create", .context = "ids.generate" }) catch {};
+        if (ctx.diag) |d| d.fail(err, .{ .op = "logic.workspaces.create", .context = "ids.generate" });
         return error.Io;
     };
 

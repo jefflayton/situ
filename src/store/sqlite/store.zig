@@ -34,7 +34,7 @@ pub const Sqlite = struct {
         store: *Sqlite,
         done: bool,
         arena: Arena,
-        diag: ?*core.Diagnostic,
+        diag: *core.Diagnostic,
 
         pub fn commit(self: *Txn) store.Error!void {
             self.store.db.exec("COMMIT", .{}, .{}) catch |err| return errors.capture(&self.store.db, err, "commit txn", self.diag);
@@ -223,7 +223,7 @@ fn execScript(db: *sqlite.Db, sql: [:0]const u8, diag: ?*core.Diagnostic) store.
     defer if (err_msg != null) sqlite.c.sqlite3_free(err_msg);
     const err = errors.classifyCode(rc);
     if (diag) |d| {
-        d.fail(err, .{ .op = "execute migration", .context = std.mem.span(err_msg) }) catch {};
+        d.fail(err, .{ .op = "execute migration", .context = std.mem.span(err_msg) });
     }
     return err;
 }

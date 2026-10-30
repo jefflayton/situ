@@ -9,11 +9,11 @@ const cmd = @import("cmd/root.zig");
 pub fn print(ctx: *Context, command: ?cmd.Command) (Writer.Error || Allocator.Error)!void {
     if (command) |c| {
         commandHelp(ctx.gpa, ctx.stdout, c) catch |err| {
-            return ctx.diag.fail(err, .{ .op = "print.commandHelp", .context = "stdout" });
+            return ctx.diag.failAs(err, .{ .op = "print.commandHelp", .context = "stdout" });
         };
     } else {
         rootHelp(ctx.gpa, ctx.stdout) catch |err| {
-            return ctx.diag.fail(err, .{ .op = "print.rootHelp", .context = "stdout" });
+            return ctx.diag.failAs(err, .{ .op = "print.rootHelp", .context = "stdout" });
         };
     }
 }
@@ -119,11 +119,11 @@ fn listFlags(comptime T: type, gpa: Allocator) Allocator.Error![]u8 {
 pub fn usage(ctx: *Context, command: ?cmd.Command) Writer.Error!void {
     if (command) |c| {
         commandUsage(ctx.stderr, c) catch |err| {
-            return ctx.diag.fail(err, .{ .op = "usage.commandUsage", .context = "stderr" });
+            return ctx.diag.failAs(err, .{ .op = "usage.commandUsage", .context = "stderr" });
         };
     } else {
         rootUsage(ctx.stderr) catch |err| {
-            return ctx.diag.fail(err, .{ .op = "usage.rootUsage", .context = "stderr" });
+            return ctx.diag.failAs(err, .{ .op = "usage.rootUsage", .context = "stderr" });
         };
     }
 }
