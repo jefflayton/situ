@@ -184,6 +184,7 @@ fn probe(ctx: *Context, root: paths.Found) !State {
                 .io = ctx.io,
                 .gpa = ctx.gpa,
                 .arena = arena.allocator(),
+                .diag = &ctx.diag,
             };
             _ = logic.withTxn(s, &lc, .{ .id = c.data.workspace_id }, logic.workspaces.read) catch |err| switch (err) {
                 error.NotFound => return .{ .inconsistent = .MissingWorkspace },

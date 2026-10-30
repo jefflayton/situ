@@ -127,6 +127,7 @@ pub fn listProjects(self: *Context, arena: *std.heap.ArenaAllocator) Error!Array
             .gpa = self.gpa,
             .arena = arena.allocator(),
             .project_id = uuid,
+            .diag = &self.diag,
         };
         const meta = logic.withTxn(&s, &ctx, .{}, logic.meta.read) catch |err| switch (err) {
             error.NotFound => continue,

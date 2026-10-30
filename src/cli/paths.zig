@@ -100,7 +100,7 @@ pub fn configToml(gpa: Allocator, environ: *Environ) Error![:0]u8 {
 const DEPTH_CAP = 64;
 
 /// Finds the nearest situ.toml, checking the `start` dir and walking up through its ancestors.
-pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: ?*core.Diagnostic) Error!?Found {
+pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: *core.Diagnostic) Error!?Found {
     var dir = try start.openDir(io, ".", .{});
     errdefer dir.close(io);
 
@@ -110,7 +110,7 @@ pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: ?*core.Dia
             return .{
                 .dir = dir,
                 .path = dir.realPathFileAlloc(io, ".", gpa) catch |err| {
-                    if (diag) |d| d.fail(err, .{ .op = "findWorkspaceRoot.realPathFileAlloc" });
+                    diag.fail(err, .{ .op = "findWorkspaceRoot.realPathFileAlloc" });
                     return error.BadPath;
                 },
                 .linked = st.kind == .sym_link,
@@ -118,7 +118,7 @@ pub fn findWorkspaceRoot(io: Io, gpa: Allocator, start: Io.Dir, diag: ?*core.Dia
         } else |err| switch (err) {
             error.FileNotFound => {},
             else => |e| {
-                if (diag) |d| d.fail(e, .{ .op = "findWorkspaceRoot.statFile", .context = "situ.toml" });
+                diag.fail(e, .{ .op = "findWorkspaceRoot.statFile", .context = "situ.toml" });
                 return error.BadPath;
             },
         }

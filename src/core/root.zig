@@ -33,12 +33,10 @@ pub const Diagnostic = struct {
     stack: [STACK_LEN]?Info = .{null} ** STACK_LEN,
     idx: usize = 0,
 
+    const PartialInfo = struct { op: ?[]const u8 = null, context: ?[]const u8 = null };
+
     /// Add a new entry to the diagnistic stack
-    pub fn fail(
-        self: *Diagnostic,
-        err: anytype,
-        info: struct { op: ?[]const u8 = null, context: ?[]const u8 = null },
-    ) void {
+    pub fn fail(self: *Diagnostic, err: anytype, info: PartialInfo) void {
         if (self.idx == STACK_LEN) self.dropOldestFromStack();
 
         self.stack[self.idx] = .{
@@ -50,11 +48,7 @@ pub const Diagnostic = struct {
     }
 
     /// Calls `fail()`, then returns `err`.
-    pub fn failAs(
-        self: *Diagnostic,
-        err: anytype,
-        info: struct { op: ?[]const u8 = null, context: ?[]const u8 = null },
-    ) @TypeOf(err) {
+    pub fn failAs(self: *Diagnostic, err: anytype, info: PartialInfo) @TypeOf(err) {
         self.fail(err, info);
         return err;
     }
