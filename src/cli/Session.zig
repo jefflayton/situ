@@ -28,19 +28,27 @@ const Session = @This();
 pub const OpenError = error{ ConfigNotInitialized, StoreNotInitialized } ||
     std.Io.Cancelable ||
     Allocator.Error ||
-    StoreError;
+    StoreError ||
+    WorkspaceConfig.ReadError ||
+    Context.GetStoreError;
 
 pub fn open(ctx: *Context, root: paths.Found) OpenError!Session {
-    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| blk: {
-        ctx.diag.set(root.path, "", "WorkspaceConfig.read", err);
-        break :blk null;
-    } orelse return error.ConfigNotInitialized;
+    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| {
+        const e = switch (err) {
+            error.NotFound => error.ConfigNotInitialized,
+            else => |e| e,
+        };
+        return ctx.diag.failAs(e, .{ .op = "Session.open.WorkspaceConfig.read", .context = root.path });
+    };
     errdefer cfg.deinit();
 
-    var s = ctx.getStore(cfg.data.project_id) catch |err| blk: {
-        ctx.diag.set("", "", "WorkspaceConfig.read", err);
-        break :blk null;
-    } orelse return error.StoreNotInitialized;
+    var s = ctx.getStore(cfg.data.project_id) catch |err| {
+        const e = switch (err) {
+            error.NotFound => error.StoreNotInitialized,
+            else => |e| e,
+        };
+        return ctx.diag.failAs(e, .{ .op = "Session.open.getStore" });
+    };
     errdefer s.deinit();
 
     var arena: Arena = .init(ctx.gpa);
@@ -69,10 +77,12 @@ pub fn open(ctx: *Context, root: paths.Found) OpenError!Session {
     };
 }
 
-pub fn close(self: *Session) !void {
+pub fn flush(self: *Session) @import("store").Error!void {
     var ctx = self.logicCtx();
     try logic.withTxn(&self.store, &ctx, .{}, logic.meta.flush);
+}
 
+pub fn close(self: *Session) void {
     self.arena.deinit();
     if (self.cfg) |*c| c.deinit();
     self.store.deinit();
@@ -83,7 +93,7 @@ pub fn create(ctx: *Context, root: paths.Found, project_id: core.Uuid, project_n
     errdefer arena.deinit();
 
     var s = ctx.createStore(project_id) catch |err| {
-        ctx.diag.set("", "", "Sqlite.create", err);
+        ctx.diag.fail(err, .{ .op = "Session.create.createStore" });
         return error.StoreNotInitialized;
     };
     errdefer {
@@ -132,7 +142,7 @@ pub fn attach(ctx: *Context, root: paths.Found, project_id: core.Uuid) OpenError
     errdefer arena.deinit();
 
     var s = ctx.getStore(project_id) catch |err| {
-        ctx.diag.set("", "", "Sqlite.open", err);
+        ctx.diag.fail(err, .{ .op = "Session.attach.getStore" });
         return error.StoreNotInitialized;
     };
     errdefer s.deinit();

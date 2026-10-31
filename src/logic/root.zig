@@ -15,7 +15,7 @@ pub const Context = struct {
     replica_id: ?core.ReplicaId = null,
     ids: ?*core.V7 = null,
     clock: ?*core.Clock = null,
-    diag: ?*core.Diagnostic = null,
+    diag: *core.Diagnostic,
 };
 
 pub fn withTxn(

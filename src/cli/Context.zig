@@ -16,7 +16,7 @@ const WorkspaceConfig = @import("WorkspaceConfig.zig");
 io: Io,
 gpa: Allocator,
 environ: *Environ,
-diag: core.Diagnostic = .{},
+diag: core.Diagnostic,
 stdin: *Io.Reader,
 stdout: *Io.Writer,
 stderr: *Io.Writer,
@@ -42,13 +42,11 @@ pub fn getConfig(self: *Context) !Config {
     Io.Dir.createDirAbsolute(self.io, dir_path, .default_dir) catch |err| switch (err) {
         error.PathAlreadyExists => {},
         else => |e| {
-            self.diag.set(dir_path, "", "create directory", e);
-            return e;
+            return self.diag.failAs(e, .{ .op = "getConfig.createDirAbsolute", .context = dir_path });
         },
     };
     const dir = Io.Dir.openDirAbsolute(self.io, dir_path, .{}) catch |err| {
-        self.diag.set(dir_path, "", "open directory", err);
-        return err;
+        return self.diag.failAs(err, .{ .op = "getConfig.openDirAbsolute", .context = dir_path });
     };
     defer dir.close(self.io);
 
@@ -61,8 +59,10 @@ pub fn getConfig(self: *Context) !Config {
     return new_cfg;
 }
 
+pub const GetStoreError = paths.Error || store.Error || Io.Dir.AccessError;
+
 /// Gets the store for the current project
-pub fn getStore(self: *Context, id: core.Uuid) !store.Sqlite {
+pub fn getStore(self: *Context, id: core.Uuid) GetStoreError!store.Sqlite {
     const path = try paths.projectDb(self.gpa, self.environ, id);
     defer self.gpa.free(path);
 
@@ -81,19 +81,16 @@ pub fn createStore(self: *Context, id: core.Uuid) !store.Sqlite {
 
     const dir_path = std.fs.path.dirname(path) orelse return error.BadPath;
     const dir = Io.Dir.cwd().createDirPathOpen(self.io, dir_path, .{}) catch |e| {
-        self.diag.set(path, "", "open directory", e);
-        return e;
+        return self.diag.failAs(e, .{ .op = "createStore.createDirPathOpen", .context = path });
     };
     defer dir.close(self.io);
 
     var atomic = dir.createFileAtomic(self.io, path, .{}) catch |e| {
-        self.diag.set(path, "", "create file", e);
-        return e;
+        return self.diag.failAs(e, .{ .op = "createStore.createFileAtomic", .context = path });
     };
     defer atomic.deinit(self.io);
     atomic.link(self.io) catch |e| {
-        self.diag.set(path, "", "link file", e);
-        return e;
+        return self.diag.failAs(e, .{ .op = "createStore.atomic.link", .context = path });
     };
 
     return try store.Sqlite.init(path, &self.diag);
@@ -110,21 +107,18 @@ pub fn listProjects(self: *Context, arena: *std.heap.ArenaAllocator) Error!Array
     defer found.deinit(self.io, self.gpa);
 
     var walker = found.dir.walkSelectively(self.gpa) catch |err| {
-        self.diag.set(found.path, "", "walk dir", err);
-        return err;
+        return self.diag.failAs(err, .{ .op = "listProjects.walkSelectively", .context = found.path });
     };
     defer walker.deinit();
 
     var projects: ArrayList(Project) = .init(self.gpa);
     while (walker.next(self.io) catch |err| {
-        self.diag.set(found.path, "", "iterate dir", err);
-        return err;
+        return self.diag.failAs(err, .{ .op = "listProjects.walker.next", .context = found.path });
     }) |entry| {
         if (entry.kind != .directory) continue;
 
         const uuid = core.Uuid.parse(entry.basename) catch |err| {
-            self.diag.set(found.path, entry.basename, "parse uuid", err);
-            return err;
+            return self.diag.failAs(err, .{ .op = "listProjects.Uuid.parse", .context = entry.basename });
         };
 
         var s = try self.getStore(uuid);
@@ -135,6 +129,7 @@ pub fn listProjects(self: *Context, arena: *std.heap.ArenaAllocator) Error!Array
             .gpa = self.gpa,
             .arena = arena.allocator(),
             .project_id = uuid,
+            .diag = &self.diag,
         };
         const meta = logic.withTxn(&s, &ctx, .{}, logic.meta.read) catch |err| switch (err) {
             error.NotFound => continue,

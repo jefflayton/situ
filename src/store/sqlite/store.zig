@@ -12,7 +12,7 @@ const row = @import("row.zig");
 pub const Sqlite = struct {
     db: sqlite.Db,
 
-    pub fn init(path: [:0]const u8, diag: *core.Diagnostic) !Sqlite {
+    pub fn init(path: [:0]const u8, diag: *core.Diagnostic) store.Error!Sqlite {
         var db = try open(path, diag);
         errdefer db.deinit();
 
@@ -24,7 +24,7 @@ pub const Sqlite = struct {
         self.db.deinit();
     }
 
-    pub fn begin(self: *Sqlite, gpa: std.mem.Allocator, diag: ?*core.Diagnostic) store.Error!Txn {
+    pub fn begin(self: *Sqlite, gpa: std.mem.Allocator, diag: *core.Diagnostic) store.Error!Txn {
         self.db.exec("BEGIN", .{}, .{}) catch |err| return errors.capture(&self.db, err, "begin txn", diag);
         const arena: Arena = .init(gpa);
         return .{ .store = self, .done = false, .arena = arena, .diag = diag };
@@ -34,7 +34,7 @@ pub const Sqlite = struct {
         store: *Sqlite,
         done: bool,
         arena: Arena,
-        diag: ?*core.Diagnostic,
+        diag: *core.Diagnostic,
 
         pub fn commit(self: *Txn) store.Error!void {
             self.store.db.exec("COMMIT", .{}, .{}) catch |err| return errors.capture(&self.store.db, err, "commit txn", self.diag);
@@ -208,25 +208,22 @@ fn migrate(db: *sqlite.Db, diag: *core.Diagnostic) store.Error!void {
         }
     }
     _ = db.pragma(i32, .{}, "user_version", comptime std.fmt.comptimePrint("{d}", .{latestVersion()})) catch |err| {
-        return errors.capture(db, err, "pragma set user_version", null);
+        return errors.capture(db, err, "pragma set user_version", diag);
     };
-    db.exec("COMMIT", .{}, .{}) catch |err| return errors.capture(db, err, "migrate commit", null);
+    db.exec("COMMIT", .{}, .{}) catch |err| return errors.capture(db, err, "migrate commit", diag);
 }
 
 /// Run a SQL script with sqlite3
 /// zig-sqlite3 doesn't have a wrapper for sqlite3_exec
-fn execScript(db: *sqlite.Db, sql: [:0]const u8, diag: ?*core.Diagnostic) store.Error!void {
+fn execScript(db: *sqlite.Db, sql: [:0]const u8, diag: *core.Diagnostic) store.Error!void {
     var err_msg: [*c]u8 = null;
     const rc = sqlite.c.sqlite3_exec(db.db, sql.ptr, null, null, &err_msg);
     if (rc == sqlite.c.SQLITE_OK) return;
 
     defer if (err_msg != null) sqlite.c.sqlite3_free(err_msg);
-    if (diag) |d| {
-        d.op = "execute migration";
-        if (err_msg != null) d.setDetail(std.mem.span(err_msg));
-        d.cause = null;
-    }
-    return errors.classifyCode(rc);
+    const err = errors.classifyCode(rc);
+    diag.fail(err, .{ .op = "execute migration", .context = std.mem.span(err_msg) });
+    return err;
 }
 
 test {

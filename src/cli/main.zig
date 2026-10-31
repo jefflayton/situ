@@ -12,9 +12,11 @@ const args_mod = @import("args.zig");
 const cmd = @import("cmd/root.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
+const help = @import("help.zig");
 const paths = @import("paths.zig");
 const WorkspaceConfig = @import("WorkspaceConfig.zig");
-const help = @import("help.zig");
+
+const log = std.log.scoped(.cli);
 
 const BUF_SIZE = 256;
 const ERR_BUF_SIZE = 1024;
@@ -38,6 +40,7 @@ pub fn main(init: std.process.Init) u8 {
     var ctx: Context = .{
         .io = init.io,
         .gpa = init.gpa,
+        .diag = .{},
         .environ = init.environ_map,
         .stdin = stdin,
         .stdout = stdout,
@@ -71,19 +74,16 @@ pub fn main(init: std.process.Init) u8 {
     return 0;
 }
 
-fn reportError(err: anyerror, d: *const core.Diagnostic) void {
+fn reportError(err: anyerror, d: *core.Diagnostic) void {
     switch (err) {
-        error.AlreadyInitialized => std.log.err("already a situ workspace", .{}),
-        error.OutOfMemory => std.log.err("out of memory", .{}),
-        else => {
-            std.log.err("{s} - {s}: {s}: {t}\ncause: {t}", .{
-                d.path() orelse "",
-                d.detail() orelse "",
-                d.op orelse "?",
-                err,
-                d.cause orelse err,
-            });
-        },
+        error.AlreadyInitialized => log.err("already a situ workspace", .{}),
+        error.OutOfMemory => log.err("out of memory", .{}),
+        else => {},
+    }
+    log.err("{f}", .{d});
+
+    if (@import("builtin").mode == .Debug) {
+        if (@errorReturnTrace()) |t| log.err("{any}", .{t});
     }
 }
 

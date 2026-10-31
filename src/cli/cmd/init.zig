@@ -52,7 +52,7 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         root = paths.Found{
             .dir = try Io.Dir.openDir(.cwd(), io, ".", .{}),
             .path = Io.Dir.realPathFileAlloc(.cwd(), io, ".", gpa) catch |err| {
-                ctx.diag.set("cwd", "", "realPath", err);
+                ctx.diag.fail(err, .{ .op = "init.realPathFileAlloc", .context = "cwd" });
                 return error.Io;
             },
             .linked = false,
@@ -63,7 +63,7 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
     var project_id: core.Uuid = undefined;
 
     const p = probe(ctx, root) catch |err| {
-        ctx.diag.set("", "init", "probe", err);
+        ctx.diag.fail(err, .{ .op = "init.probe" });
         return error.Io;
     };
     switch (p) {
@@ -92,21 +92,20 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
         project_id = projects.items[i].id;
         project_name = projects.items[i].name;
         session = Session.attach(ctx, root, project_id) catch |err| {
-            ctx.diag.set("", "", "init: Session.attach", err);
+            ctx.diag.fail(err, .{ .op = "init.Session.attach" });
             return error.Io;
         };
     } else {
         var ids: core.V7 = .{};
         project_id = try ids.generate(ctx.io);
         session = Session.create(ctx, root, project_id, project_name) catch |err| {
-            ctx.diag.set("", "", "init: Session.create", err);
+            ctx.diag.fail(err, .{ .op = "init.Session.create" });
             return error.Io;
         };
         project_name = try prompt.text(ctx, arena.allocator(), "Project Name");
     }
-    defer session.close() catch |err| {
-        std.log.warn("Failed to close session: {t}", .{err});
-    };
+    try session.flush();
+    defer session.close();
 
     var lc = session.logicCtx();
     const workspaces = try logic.withTxn(&session.store, &lc, .{}, logic.workspaces.list);
@@ -145,14 +144,14 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
     session.cfg.?.write(io) catch |err| {
         var path: [std.fs.max_path_bytes]u8 = undefined;
         _ = session.cfg.?.dir.realPath(io, &path) catch {};
-        ctx.diag.set(&path, "", "WorkspaceConfig.write", err);
+        ctx.diag.fail(err, .{ .op = "init.run.WorkspaceConfig.write", .context = &path });
         return error.Io;
     };
 
     const git_dir: ?Io.Dir = root.dir.openDir(io, ".git", .{}) catch |err| switch (err) {
         error.FileNotFound => null, // TODO: record not found
         else => |e| {
-            ctx.diag.set(".git", "", "dir.access", e);
+            ctx.diag.fail(e, .{ .op = "init.run.root.openDir", .context = ".git" });
             return error.Io;
         },
     };
@@ -164,7 +163,7 @@ pub fn run(ctx: *Context, _: *const Opts) cmd.CommandError!void {
 }
 
 fn probe(ctx: *Context, root: paths.Found) !State {
-    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir) catch |err| switch (err) {
+    var cfg = WorkspaceConfig.read(ctx.io, ctx.gpa, root.dir, &ctx.diag) catch |err| switch (err) {
         error.NotFound => null,
         else => |e| return e,
     };
@@ -185,6 +184,7 @@ fn probe(ctx: *Context, root: paths.Found) !State {
                 .io = ctx.io,
                 .gpa = ctx.gpa,
                 .arena = arena.allocator(),
+                .diag = &ctx.diag,
             };
             _ = logic.withTxn(s, &lc, .{ .id = c.data.workspace_id }, logic.workspaces.read) catch |err| switch (err) {
                 error.NotFound => return .{ .inconsistent = .MissingWorkspace },
@@ -206,7 +206,7 @@ fn appendExclude(ctx: *Context, dir: Io.Dir, path: []const u8, exclude: []const 
     const data = dir.readFileAlloc(ctx.io, path, ctx.gpa, .unlimited) catch |err| switch (err) {
         error.FileNotFound => null,
         else => |e| {
-            ctx.diag.set(path, "", "appendExclude.readFileAlloc", e);
+            ctx.diag.fail(e, .{ .op = "init.appendExclude.readFileAlloc", .context = path });
             return error.Io;
         },
     };
@@ -219,7 +219,7 @@ fn appendExclude(ctx: *Context, dir: Io.Dir, path: []const u8, exclude: []const 
             @memcpy(new[d.len..], exclude);
 
             dir.writeFile(ctx.io, .{ .sub_path = path, .data = new }) catch |err| {
-                ctx.diag.set(path, "", "appendExclude.writeFile", err);
+                ctx.diag.fail(err, .{ .op = "init.appendExclude.writeFile", .context = path });
                 return error.Io;
             };
         }
