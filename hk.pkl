@@ -1,0 +1,22 @@
+amends "package://github.com/jdx/hk/releases/download/v2.7.0/hk@2.7.0#/Config.pkl"
+
+import "package://github.com/jdx/hk/releases/download/v2.7.0/hk@2.7.0#/Builtins.pkl"
+// Using a coding agent? See https://hk.jdx.dev/agents
+
+steps = new Mapping {
+  // Linters
+  ["actionlint"] = Builtins.actionlint
+  // Formatter
+  ["oxfmt"] = (Builtins.oxfmt) {
+    exclude = List("mise.toml")
+  }
+  ["mise"] = Builtins.mise
+  // Tests
+  ["zig_test"] {
+    glob = List("**/*.zig", "build.zig.zon")
+    check = new CommandSpec {
+      command = "zig build test"
+      effect = "read"
+    }
+  }
+}
