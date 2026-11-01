@@ -1,0 +1,12 @@
+{
+    "$schema": "https://unpkg.com/oxfmt@0.66.0/configuration_schema.json",
+    "ignorePatterns": ["mise.toml"],
+    "tabWidth": 4,
+    "useTabs": false,
+    "overrides": [
+        {
+            "files": ["**/*.yml", "**/*.yaml"],
+            "options": { "tabWidth": 2 }
+        }
+    ]
+}

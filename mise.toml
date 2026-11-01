@@ -5,6 +5,7 @@ lockfile = true
 [tools]
 actionlint = "1.7.12"
 "aqua:quarylabs/sqruff" = "0.38.0"
+hk = { version = "latest", workflow = "release.yml" }
 "npm:vscode-langservers-extracted" = "4.10.0"
 "npm:yaml-language-server" = "1.24.0"
 oxfmt = "0.66.0"
@@ -16,7 +17,11 @@ zls = "0.16.0"
 run = ["zig fmt .", "oxfmt .", "sqruff fix src/store/sqlite/migrations"]
 
 [tasks."fmt:ci"]
-run = ["zig fmt --check .", "oxfmt --check .", "sqruff lint src/store/sqlite/migrations"]
+run = [
+  "zig fmt --check .",
+  "oxfmt --check .",
+  "sqruff lint src/store/sqlite/migrations",
+]
 
 [tasks.lint]
 run = "actionlint"

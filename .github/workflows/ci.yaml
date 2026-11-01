@@ -24,4 +24,4 @@ jobs:
 
       - run: mkdir -p ~/.cache/zig/tmp
 
-      - run: mise run check
+      - run: hk check --safe
